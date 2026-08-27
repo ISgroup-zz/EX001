@@ -19,26 +19,41 @@ Vendor ─┘           │   (PO │ CONTRACT │ FRAMEWORK │ VARIATION)   �
 
 ## Deploying to Railway
 
-The app runs on **PostgreSQL**. Railway provides it as a managed service and injects
-`DATABASE_URL` automatically.
+The app runs on **PostgreSQL**, which Railway provides as a managed service.
 
 1. **New Project → Deploy from GitHub repo** → `ISgroup-zz/EX001`, branch
    `claude/procurement-project-app-7vz23p`.
-2. **+ New → Database → Add PostgreSQL**. `DATABASE_URL` is wired to the app service for you.
-3. Service → **Settings → Deploy → Pre-deploy Command**:
+2. **+ New → Database → Add PostgreSQL**.
+3. **Link the two — this does not happen on its own.** Adding the database does *not*
+   give the app its connection string. On the **app** service → **Variables**, add:
+   ```
+   DATABASE_URL = ${{Postgres.DATABASE_URL}}
+   ```
+   Use whatever the database service is actually called in place of `Postgres`. This is a
+   Railway reference variable, so it follows the database if its credentials ever change.
+   Use `DATABASE_URL` rather than `DATABASE_PUBLIC_URL`: the former goes over the private
+   network, which is faster and is not billed as egress.
+
+   Do **not** paste the value from `.env.example` here — that points at `127.0.0.1`, which
+   inside a Railway container means the container itself, and you'll get
+   `Can't reach database server at 127.0.0.1:5432`.
+4. Service → **Settings → Deploy → Pre-deploy Command**:
    ```
    npx prisma migrate deploy
    ```
    This runs in its own container before traffic switches, so a failed migration blocks
    the deploy instead of breaking the running version.
-4. *(First deploy only, optional)* **Variables → `SEED_DEMO_DATA=true`** to load the demo
+5. *(First deploy only, optional)* **Variables → `SEED_DEMO_DATA=true`** to load the demo
    data below, then change the pre-deploy command to:
    ```
    npx prisma migrate deploy && npm run db:seed:if-empty
    ```
    Remove the variable once you've seen it working — the seed refuses to run against a
    database that already has users, but there's no reason to leave it armed.
-5. **Settings → Networking → Generate Domain**, open it and sign in.
+6. **Settings → Networking → Generate Domain**, open it and sign in. If the domain returns
+   *"Application failed to respond"* with `connection refused`, the generated domain is
+   pointing at a different port than the app listens on — set a `PORT` variable and make the
+   domain's target port match it.
 
 `railway.json` already pins the builder (Nixpacks), the `/login` healthcheck and the
 restart policy. The start command binds Railway's injected `$PORT`.
