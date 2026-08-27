@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/server/db";
-import { openProject } from "@/server/services/project";
+import { listProjects, openProject } from "@/server/services/project";
 import { cancelAgreement, deleteAgreement } from "@/server/services/agreement";
 import { getProjectBudgetMinor } from "@/server/services/budget";
 import { toMinor } from "@/lib/money";
@@ -138,5 +138,54 @@ describe("the originating document", () => {
     const saved = await prisma.project.findUniqueOrThrow({ where: { id: project.id } });
     expect(saved.status).toBe("ACTIVE");
     expect(await getProjectBudgetMinor(project.id)).toBe(toMinor(2000));
+  });
+});
+
+describe("finding projects", () => {
+  /**
+   * Postgres `LIKE` is case-sensitive where SQLite's was not. Without an explicit
+   * `mode: "insensitive"` this search silently stops matching, which is exactly the
+   * kind of regression that only shows up in production.
+   */
+  it("matches regardless of case", async () => {
+    const client = await makeClient();
+    await openProject({
+      name: "Substation 220kV Upgrade",
+      code: "PRJ-CASE-1",
+      clientId: client.id,
+      managerId: null,
+      currency: "USD",
+      description: null,
+      startDate: NOW,
+      targetDate: null,
+      agreement: agreementInput("PO", "PO-CASE-1", {
+        lines: [{ description: "Panel", quantity: 1, unitPrice: 100 }],
+      }),
+    });
+
+    for (const term of ["Substation", "substation", "SUBSTATION", "220kV"]) {
+      const found = await listProjects({ search: term });
+      expect(found.map((project) => project.code), `searching "${term}"`).toContain("PRJ-CASE-1");
+    }
+  });
+
+  it("matches on project code too", async () => {
+    const client = await makeClient();
+    await openProject({
+      name: "Anything",
+      code: "PRJ-CODE-9",
+      clientId: client.id,
+      managerId: null,
+      currency: "USD",
+      description: null,
+      startDate: NOW,
+      targetDate: null,
+      agreement: agreementInput("PO", "PO-CODE-9", {
+        lines: [{ description: "Item", quantity: 1, unitPrice: 100 }],
+      }),
+    });
+
+    expect((await listProjects({ search: "prj-code-9" })).map((p) => p.code)).toContain("PRJ-CODE-9");
+    expect(await listProjects({ search: "no-such-project" })).toHaveLength(0);
   });
 });

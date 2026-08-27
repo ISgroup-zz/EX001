@@ -100,9 +100,11 @@ export async function listProjects(
       ...(filters.managerId ? { managerId: filters.managerId } : {}),
       ...(filters.search
         ? {
+            // `insensitive` is required on Postgres, whose LIKE is case-sensitive —
+            // without it, searching "substation" stops matching "Substation".
             OR: [
-              { name: { contains: filters.search } },
-              { code: { contains: filters.search } },
+              { name: { contains: filters.search, mode: "insensitive" as const } },
+              { code: { contains: filters.search, mode: "insensitive" as const } },
             ],
           }
         : {}),

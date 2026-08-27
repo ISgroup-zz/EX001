@@ -17,15 +17,45 @@ Vendor ─┘           │   (PO │ CONTRACT │ FRAMEWORK │ VARIATION)   �
                     └─ Invoice ── lines ── Payment
 ```
 
-## Getting started
+## Deploying to Railway
+
+The app runs on **PostgreSQL**. Railway provides it as a managed service and injects
+`DATABASE_URL` automatically.
+
+1. **New Project → Deploy from GitHub repo** → `ISgroup-zz/EX001`, branch
+   `claude/procurement-project-app-7vz23p`.
+2. **+ New → Database → Add PostgreSQL**. `DATABASE_URL` is wired to the app service for you.
+3. Service → **Settings → Deploy → Pre-deploy Command**:
+   ```
+   npx prisma migrate deploy
+   ```
+   This runs in its own container before traffic switches, so a failed migration blocks
+   the deploy instead of breaking the running version.
+4. *(First deploy only, optional)* **Variables → `SEED_DEMO_DATA=true`** to load the demo
+   data below, then change the pre-deploy command to:
+   ```
+   npx prisma migrate deploy && npm run db:seed:if-empty
+   ```
+   Remove the variable once you've seen it working — the seed refuses to run against a
+   database that already has users, but there's no reason to leave it armed.
+5. **Settings → Networking → Generate Domain**, open it and sign in.
+
+`railway.json` already pins the builder (Nixpacks), the `/login` healthcheck and the
+restart policy. The start command binds Railway's injected `$PORT`.
+
+## Running locally
 
 ```bash
 npm install
-cp .env.example .env      # DATABASE_URL + SESSION_SECRET
-npm run db:push           # create the SQLite schema
-npm run db:seed           # demo data (see sign-ins below)
-npm run dev               # http://localhost:3000
+cp .env.example .env       # points at the local Postgres below
+docker compose up -d       # Postgres on :5432
+npm run db:deploy          # apply migrations
+npm run db:seed            # demo data (see sign-ins below)
+npm run dev                # http://localhost:3000
 ```
+
+`npm run db:seed` **wipes** the database first — it is for local use only. Deployments use
+`npm run db:seed:if-empty`, which never clears anything.
 
 Demo sign-ins (all `password123`):
 
@@ -131,7 +161,7 @@ src/server/services/          ALL business rules live here, not in components
   └── reporting.ts            project and portfolio rollups
 src/server/actions/           server actions wrapping the services
 src/app/                      routes
-tests/                        vitest suites for the rules above
+tests/                        vitest suites for the rules above (run against Postgres)
 ```
 
 **Money is stored as integer minor units** (cents) everywhere — `*Minor` fields — and
@@ -143,19 +173,25 @@ can never disagree. Quantities are decimals rounded to 3 dp at each boundary.
 ```bash
 npm run dev         # development server
 npm run build       # production build
-npm test            # vitest — 78 tests over the business rules
+npm test            # vitest — 80 tests over the business rules (needs Postgres)
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm run db:push     # sync the schema
-npm run db:reset    # drop and recreate (stop the dev server first — it holds the file)
-npm run db:seed     # reseed demo data
+npm run db:deploy   # apply migrations (what Railway runs pre-deploy)
+npm run db:migrate  # create a new migration after changing schema.prisma
+npm run db:reset    # drop, recreate and re-apply migrations (local only)
+npm run db:seed     # reseed demo data — WIPES first, local only
 npm run db:studio   # browse the database
 ```
 
 ## Notes
 
-- SQLite by default; moving to Postgres is a `provider` + `DATABASE_URL` change.
-- Auth is email/password with scrypt hashing and a database-backed session cookie.
-  It is deliberately simple — swap in an identity provider when you need SSO.
+- PostgreSQL only. Schema changes go through migrations (`npm run db:migrate`), which
+  Railway applies on deploy — never `db push`.
+- Project search uses `mode: "insensitive"` because Postgres `LIKE` is case-sensitive.
+  There is a regression test for it in `tests/open-project.test.ts`.
+- Auth is email/password with scrypt hashing and a database-backed session cookie (an
+  opaque ID, so there is no secret to sign it with). It is deliberately simple — swap in
+  an identity provider when you need SSO. The cookie is marked `Secure` in production,
+  which Railway satisfies by serving HTTPS.
 - Invoice numbers (`INV-2026-0001`) are assigned on **issue**, not on draft creation,
   so abandoned drafts don't leave gaps in the sequence.

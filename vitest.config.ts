@@ -6,8 +6,12 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globalSetup: ["tests/globalSetup.ts"],
-    env: { DATABASE_URL: "file:./test.db" },
-    // The DB-backed suites share one SQLite file, so they must not run concurrently.
+    // globalSetup resolves the real URL (TEST_DATABASE_URL, or the local compose Postgres).
+    env: {
+      DATABASE_URL:
+        process.env.TEST_DATABASE_URL ?? "postgresql://app:app@127.0.0.1:5432/procurement_test?schema=public",
+    },
+    // The DB-backed suites share one database, so they must not run concurrently.
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 30_000,

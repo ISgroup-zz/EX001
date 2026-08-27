@@ -84,9 +84,33 @@ async function clearDatabase() {
   await prisma.documentCounter.deleteMany();
 }
 
+/**
+ * Two modes:
+ *
+ *   npm run db:seed            local development — WIPES the database, then seeds.
+ *   npm run db:seed:if-empty   deployment — seeds only an empty database, never clears.
+ *
+ * The deployment path additionally requires SEED_DEMO_DATA=true, so a stray run can
+ * never drop real data: it is opt-in, and it refuses the moment any user exists.
+ */
 async function main() {
-  console.log("Clearing existing data…");
-  await clearDatabase();
+  const seedOnlyIfEmpty = process.argv.includes("--if-empty");
+
+  if (seedOnlyIfEmpty) {
+    if (process.env.SEED_DEMO_DATA !== "true") {
+      console.log("SEED_DEMO_DATA is not 'true' — skipping demo data.");
+      return;
+    }
+    const existingUsers = await prisma.user.count();
+    if (existingUsers > 0) {
+      console.log(`Database already has ${existingUsers} user(s) — leaving it untouched.`);
+      return;
+    }
+    console.log("Empty database and SEED_DEMO_DATA=true — loading demo data…");
+  } else {
+    console.log("Clearing existing data…");
+    await clearDatabase();
+  }
 
   // ------------------------------------------------------------------ users
   const password = await hashPassword("password123");

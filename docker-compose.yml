@@ -1,0 +1,27 @@
+# Postgres for LOCAL development and `npm test`.
+#
+# The app itself is deployed to Railway, so it is deliberately not in this file —
+# run it with `npm run dev` against this database.
+#
+#   docker compose up -d
+#   npm run db:deploy && npm run db:seed && npm run dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: procurement_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - procurement-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d procurement_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  procurement-postgres:
