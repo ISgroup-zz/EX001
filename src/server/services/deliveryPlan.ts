@@ -1,7 +1,9 @@
-import type { DeliveryPlanItemStatus } from "@prisma/client";
+import type { DeliveryPlanItemStatus, PaymentBasis } from "@prisma/client";
 import { prisma, type Db } from "../db";
 import { lineTotalMinor, roundQty, splitQuantityByPercentage, splitQuantityEvenly } from "@/lib/money";
 import { addMonths, addWeeks, isPast, startOfDay } from "@/lib/dates";
+import { logPlanChange, logPlanChanges, diffMilestone } from "./planChangeLog";
+import { assertScheduleWithinPoValue, getPoNetMinor, milestoneDueMinor } from "./vendorPayment";
 
 /**
  * Delivery plans — the vendor's promised schedule, i.e. the PLANNED GRNs.
@@ -18,6 +20,13 @@ export type PlanItemInput = {
   plannedDate: Date;
   notes?: string | null;
   quantities: Array<{ vendorPoLineId: string; quantity: number }>;
+  /** What we owe the vendor when this milestone is met. See services/vendorPayment.ts. */
+  payment?: {
+    basis: PaymentBasis;
+    percent?: number | null;
+    amountMinor?: number | null;
+    dueDays?: number;
+  };
 };
 
 export type PlanLineForSplit = {
@@ -32,8 +41,18 @@ export function generateDefaultPlan(lines: PlanLineForSplit[], plannedDate: Date
       label: "Full delivery",
       plannedDate: startOfDay(plannedDate),
       quantities: lines.map((line) => ({ vendorPoLineId: line.vendorPoLineId, quantity: roundQty(line.quantity) })),
+      // One delivery means the whole order is payable on it.
+      payment: { basis: "PERCENTAGE", percent: 100, dueDays: 0 },
     },
   ];
+}
+
+/** Split 100% across n milestones, with the remainder on the last so it totals exactly 100. */
+function evenPercentages(parts: number): number[] {
+  const each = Math.floor((100 / parts) * 100) / 100;
+  const shares = Array.from({ length: parts }, () => each);
+  shares[parts - 1] = Math.round((100 - each * (parts - 1)) * 100) / 100;
+  return shares;
 }
 
 /**
@@ -48,6 +67,7 @@ export function splitEvenly(
 ): PlanItemInput[] {
   const safeParts = Math.max(1, Math.floor(parts));
   const perLine = lines.map((line) => splitQuantityEvenly(line.quantity, safeParts));
+  const shares = evenPercentages(safeParts);
 
   return Array.from({ length: safeParts }, (_, index) => ({
     label: `Shipment ${index + 1} of ${safeParts}`,
@@ -56,6 +76,7 @@ export function splitEvenly(
       vendorPoLineId: line.vendorPoLineId,
       quantity: perLine[lineIndex][index],
     })),
+    payment: { basis: "PERCENTAGE", percent: shares[index], dueDays: 0 },
   }));
 }
 
@@ -63,6 +84,7 @@ export function splitEvenly(
 export function splitMonthly(lines: PlanLineForSplit[], months: number, startDate: Date): PlanItemInput[] {
   const safeMonths = Math.max(1, Math.floor(months));
   const perLine = lines.map((line) => splitQuantityEvenly(line.quantity, safeMonths));
+  const shares = evenPercentages(safeMonths);
 
   return Array.from({ length: safeMonths }, (_, index) => ({
     label: `Month ${index + 1} of ${safeMonths}`,
@@ -71,6 +93,7 @@ export function splitMonthly(lines: PlanLineForSplit[], months: number, startDat
       vendorPoLineId: line.vendorPoLineId,
       quantity: perLine[lineIndex][index],
     })),
+    payment: { basis: "PERCENTAGE", percent: shares[index], dueDays: 0 },
   }));
 }
 
@@ -149,7 +172,13 @@ export async function replacePlan(vendorPoId: string, items: PlanItemInput[], db
  * The single write path for planned deliveries — so the "never plan more than was
  * ordered" rule is enforced here rather than by every caller remembering to check.
  */
-export async function createPlanItems(vendorPoId: string, items: PlanItemInput[], db: Db = prisma): Promise<void> {
+export async function createPlanItems(
+  vendorPoId: string,
+  items: PlanItemInput[],
+  db: Db = prisma,
+  userId: string | null = null,
+  isInitialPlan = false,
+): Promise<void> {
   const po = await db.vendorPO.findUnique({
     where: { id: vendorPoId },
     include: {
@@ -175,20 +204,47 @@ export async function createPlanItems(vendorPoId: string, items: PlanItemInput[]
     alreadyPlanned,
   );
 
+  // The payment schedule may not promise more than the order is worth.
+  const poNetMinor = await getPoNetMinor(vendorPoId, db);
+  const existingPayments = po.planItems.map((item) => ({
+    basis: item.paymentBasis,
+    percent: item.paymentPercent,
+    amountMinor: item.paymentAmountMinor,
+  }));
+  assertScheduleWithinPoValue(
+    [
+      ...existingPayments,
+      ...items.map((item) => ({
+        basis: item.payment?.basis ?? "PERCENTAGE",
+        percent: item.payment?.percent ?? 0,
+        amountMinor: item.payment?.amountMinor ?? 0,
+        dueDays: item.payment?.dueDays ?? 0,
+      })),
+    ],
+    poNetMinor,
+  );
+
   // Sequence continues past cancelled tranches too — [vendorPoId, seq] is unique.
   const highestSeq = await db.deliveryPlanItem.aggregate({ where: { vendorPoId }, _max: { seq: true } });
   let seq = highestSeq._max.seq ?? 0;
+
   for (const item of items) {
     const quantities = item.quantities.filter((entry) => entry.quantity > 0);
     if (quantities.length === 0) continue;
     seq += 1;
-    await db.deliveryPlanItem.create({
+
+    const payment = item.payment ?? { basis: "PERCENTAGE" as const, percent: 0, dueDays: 0 };
+    const created = await db.deliveryPlanItem.create({
       data: {
         vendorPoId,
         seq,
         label: item.label ?? null,
         plannedDate: startOfDay(item.plannedDate),
         notes: item.notes ?? null,
+        paymentBasis: payment.basis,
+        paymentPercent: payment.basis === "PERCENTAGE" ? payment.percent ?? 0 : null,
+        paymentAmountMinor: payment.basis === "FIXED" ? Math.round(payment.amountMinor ?? 0) : null,
+        paymentDueDays: Math.max(0, Math.round(payment.dueDays ?? 0)),
         lines: {
           create: quantities.map((entry) => ({
             vendorPoLineId: entry.vendorPoLineId,
@@ -197,6 +253,22 @@ export async function createPlanItems(vendorPoId: string, items: PlanItemInput[]
         },
       },
     });
+
+    const label = created.label ?? `Delivery ${created.seq}`;
+    const dueMinor = milestoneDueMinor(created, poNetMinor);
+    await logPlanChange(
+      {
+        vendorPoId,
+        planItemId: created.id,
+        action: isInitialPlan ? "PLAN_CREATED" : "MILESTONE_ADDED",
+        summary:
+          `"${label}" planned for ${created.plannedDate.toISOString().slice(0, 10)}` +
+          `, payment ${payment.basis === "PERCENTAGE" ? `${payment.percent ?? 0}%` : (dueMinor / 100).toFixed(2)}`,
+        newValue: String(dueMinor),
+      },
+      userId,
+      db,
+    );
   }
 }
 
@@ -240,12 +312,19 @@ export async function recomputePlanItemStatus(planItemId: string, db: Db = prism
 
 export async function updatePlanItem(
   planItemId: string,
-  input: { plannedDate: Date; label: string | null; notes: string | null; quantities: Array<{ vendorPoLineId: string; quantity: number }> },
+  input: {
+    plannedDate: Date;
+    label: string | null;
+    notes: string | null;
+    quantities: Array<{ vendorPoLineId: string; quantity: number }>;
+    payment?: { basis: PaymentBasis; percent?: number | null; amountMinor?: number | null; dueDays?: number };
+  },
   db: Db = prisma,
+  userId: string | null = null,
 ): Promise<void> {
   const item = await db.deliveryPlanItem.findUnique({
     where: { id: planItemId },
-    include: { vendorPo: { include: { lines: true } } },
+    include: { vendorPo: { include: { lines: true } }, lines: true },
   });
   if (!item) throw new Error("Planned delivery not found.");
 
@@ -274,29 +353,120 @@ export async function updatePlanItem(
     new Map(item.vendorPo.lines.map((line) => [line.id, { quantity: line.quantity, description: line.description }])),
   );
 
+  const payment = input.payment ?? {
+    basis: item.paymentBasis,
+    percent: item.paymentPercent,
+    amountMinor: item.paymentAmountMinor,
+    dueDays: item.paymentDueDays,
+  };
+
+  const poNetMinor = await getPoNetMinor(item.vendorPoId, db);
+  assertScheduleWithinPoValue(
+    [
+      ...otherItems.map((other) => ({
+        basis: other.paymentBasis,
+        percent: other.paymentPercent,
+        amountMinor: other.paymentAmountMinor,
+      })),
+      { basis: payment.basis, percent: payment.percent, amountMinor: payment.amountMinor, dueDays: payment.dueDays },
+    ],
+    poNetMinor,
+  );
+
+  // A milestone already paid against cannot have its value cut below what has been paid.
+  const paid = await db.vendorPayment.aggregate({ where: { planItemId }, _sum: { amountMinor: true } });
+  const paidMinor = paid._sum.amountMinor ?? 0;
+  const newDueMinor = milestoneDueMinor(
+    {
+      paymentBasis: payment.basis,
+      paymentPercent: payment.percent ?? null,
+      paymentAmountMinor: payment.amountMinor ?? null,
+    },
+    poNetMinor,
+  );
+  if (paidMinor > newDueMinor) {
+    throw new Error(
+      `This milestone has already been paid ${(paidMinor / 100).toFixed(2)}; its value cannot be reduced below that.`,
+    );
+  }
+
+  // Snapshot before/after so the log records what actually moved, not merely that an edit happened.
+  const before = {
+    id: item.id,
+    seq: item.seq,
+    label: item.label,
+    plannedDate: item.plannedDate,
+    paymentBasis: item.paymentBasis as string,
+    paymentPercent: item.paymentPercent,
+    paymentAmountMinor: item.paymentAmountMinor,
+    paymentDueDays: item.paymentDueDays,
+    quantities: new Map(item.lines.map((line) => [line.vendorPoLineId, line.plannedQuantity])),
+  };
+
   await db.deliveryPlanLine.deleteMany({ where: { planItemId } });
-  await db.deliveryPlanItem.update({
+  const updated = await db.deliveryPlanItem.update({
     where: { id: planItemId },
     data: {
       plannedDate: startOfDay(input.plannedDate),
       label: input.label,
       notes: input.notes,
+      paymentBasis: payment.basis,
+      paymentPercent: payment.basis === "PERCENTAGE" ? payment.percent ?? 0 : null,
+      paymentAmountMinor: payment.basis === "FIXED" ? Math.round(payment.amountMinor ?? 0) : null,
+      paymentDueDays: Math.max(0, Math.round(payment.dueDays ?? 0)),
       lines: {
         create: input.quantities
           .filter((entry) => entry.quantity > 0)
           .map((entry) => ({ vendorPoLineId: entry.vendorPoLineId, plannedQuantity: roundQty(entry.quantity) })),
       },
     },
+    include: { lines: true },
   });
+
+  const after = {
+    id: updated.id,
+    seq: updated.seq,
+    label: updated.label,
+    plannedDate: updated.plannedDate,
+    paymentBasis: updated.paymentBasis as string,
+    paymentPercent: updated.paymentPercent,
+    paymentAmountMinor: updated.paymentAmountMinor,
+    paymentDueDays: updated.paymentDueDays,
+    quantities: new Map(updated.lines.map((line) => [line.vendorPoLineId, line.plannedQuantity])),
+  };
+
+  const lineNames = new Map(item.vendorPo.lines.map((line) => [line.id, line.description]));
+  const changes = diffMilestone(before, after, lineNames).map((change) => ({
+    ...change,
+    vendorPoId: item.vendorPoId,
+  }));
+  await logPlanChanges(changes, userId, db);
+
   await recomputePlanItemStatus(planItemId, db);
 }
 
-export async function cancelPlanItem(planItemId: string, db: Db = prisma): Promise<void> {
+export async function cancelPlanItem(planItemId: string, db: Db = prisma, userId: string | null = null): Promise<void> {
   const received = await receivedByPlanItem(planItemId, db);
   if ([...received.values()].some((qty) => qty > 0)) {
     throw new Error("This delivery has already been received and cannot be cancelled.");
   }
-  await db.deliveryPlanItem.update({ where: { id: planItemId }, data: { status: "CANCELLED" } });
+
+  const paid = await db.vendorPayment.aggregate({ where: { planItemId }, _sum: { amountMinor: true } });
+  if ((paid._sum.amountMinor ?? 0) > 0) {
+    throw new Error("This milestone has been paid against and cannot be cancelled.");
+  }
+
+  const item = await db.deliveryPlanItem.update({ where: { id: planItemId }, data: { status: "CANCELLED" } });
+  await logPlanChange(
+    {
+      vendorPoId: item.vendorPoId,
+      planItemId: item.id,
+      action: "MILESTONE_CANCELLED",
+      summary: `"${item.label ?? `Delivery ${item.seq}`}" cancelled`,
+    },
+    userId,
+    db,
+  );
 }
 
 // ---------------------------------------------------------------- coverage & reads
@@ -357,6 +527,10 @@ export type PlanItemView = {
   isOverdue: boolean;
   notes: string | null;
   valueMinor: number;
+  paymentBasis: PaymentBasis;
+  paymentPercent: number | null;
+  paymentAmountMinor: number | null;
+  paymentDueDays: number;
   lines: Array<{
     vendorPoLineId: string;
     description: string;
@@ -411,6 +585,10 @@ export async function getPlanForPo(vendorPoId: string, db: Db = prisma): Promise
       isOverdue: item.status !== "FULFILLED" && item.status !== "CANCELLED" && isPast(item.plannedDate),
       notes: item.notes,
       valueMinor,
+      paymentBasis: item.paymentBasis,
+      paymentPercent: item.paymentPercent,
+      paymentAmountMinor: item.paymentAmountMinor,
+      paymentDueDays: item.paymentDueDays,
       lines,
     };
   });

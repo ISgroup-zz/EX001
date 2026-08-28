@@ -8,6 +8,8 @@ import type { AgreementInput } from "@/lib/validation/schemas";
 export const NOW = today();
 
 export async function resetDatabase() {
+  await prisma.deliveryPlanChange.deleteMany();
+  await prisma.vendorPayment.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.invoiceLine.deleteMany();
   await prisma.invoice.deleteMany();

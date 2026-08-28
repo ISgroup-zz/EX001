@@ -35,8 +35,10 @@ async function setup() {
       },
     ],
     planItems: [
-      { label: "First half", plannedDate: addDays(NOW, 14), notes: null, quantities: [6] },
-      { label: "Second half", plannedDate: addDays(NOW, 45), notes: null, quantities: [4] },
+      { label: "First half", plannedDate: addDays(NOW, 14), notes: null, quantities: [6],
+        paymentBasis: "PERCENTAGE" as const, paymentPercent: 60, paymentDueDays: 0 },
+      { label: "Second half", plannedDate: addDays(NOW, 45), notes: null, quantities: [4],
+        paymentBasis: "PERCENTAGE" as const, paymentPercent: 40, paymentDueDays: 30 },
     ],
   });
 

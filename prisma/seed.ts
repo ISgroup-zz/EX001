@@ -245,10 +245,14 @@ async function main() {
         notes: null,
       },
     ],
+    // 30 / 40 / 30 against delivery, each payable 30 days after the shipment lands.
     planItems: [
-      { label: "Shipment 1 of 3", plannedDate: addDays(now, -21), notes: null, quantities: [4, 8] },
-      { label: "Shipment 2 of 3", plannedDate: addDays(now, 9), notes: null, quantities: [4, 8] },
-      { label: "Shipment 3 of 3", plannedDate: addDays(now, 40), notes: null, quantities: [4, 8] },
+      { label: "Shipment 1 of 3", plannedDate: addDays(now, -21), notes: null, quantities: [4, 8],
+        paymentBasis: "PERCENTAGE", paymentPercent: 30, paymentDueDays: 30 },
+      { label: "Shipment 2 of 3", plannedDate: addDays(now, 9), notes: null, quantities: [4, 8],
+        paymentBasis: "PERCENTAGE", paymentPercent: 40, paymentDueDays: 30 },
+      { label: "Shipment 3 of 3", plannedDate: addDays(now, 40), notes: null, quantities: [4, 8],
+        paymentBasis: "PERCENTAGE", paymentPercent: 30, paymentDueDays: 30 },
     ],
   });
 
@@ -282,9 +286,12 @@ async function main() {
         notes: null,
       },
     ],
+    // Half on each drum batch, payable 45 days after receipt.
     planItems: [
-      { label: "Drum batch 1", plannedDate: addDays(now, -5), notes: "Late — vendor chasing mill slot.", quantities: [2100, 18] },
-      { label: "Drum batch 2", plannedDate: addDays(now, 25), notes: null, quantities: [2100, 18] },
+      { label: "Drum batch 1", plannedDate: addDays(now, -5), notes: "Late — vendor chasing mill slot.", quantities: [2100, 18],
+        paymentBasis: "PERCENTAGE", paymentPercent: 50, paymentDueDays: 45 },
+      { label: "Drum batch 2", plannedDate: addDays(now, 25), notes: null, quantities: [2100, 18],
+        paymentBasis: "PERCENTAGE", paymentPercent: 50, paymentDueDays: 45 },
     ],
   });
 

@@ -3,16 +3,25 @@ import { notFound } from "next/navigation";
 import { Alert, CoverageCell, EmptyState, KpiCard, Money, PageHeader, StatusBadge } from "@/components/ui";
 import { getVendorPoDetail } from "@/server/services/vendorPo";
 import { getPlanForPo } from "@/server/services/deliveryPlan";
-import { formatDate, relativeDays } from "@/lib/dates";
+import { getPaymentSchedule } from "@/server/services/vendorPayment";
+import { getPlanHistory } from "@/server/services/planChangeLog";
+import { MilestonePayments } from "@/components/MilestonePayments";
+import { formatDate, relativeDays, toDateInput } from "@/lib/dates";
 import { formatMoney, formatQty, lineTotalMinor, sumMinor } from "@/lib/money";
 import { getT } from "@/server/locale";
+import { fill, type Dictionary } from "@/lib/i18n";
+import type { PlanHistoryRow } from "@/server/services/planChangeLog";
 
 export default async function VendorPoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const po = await getVendorPoDetail(id);
   if (!po) notFound();
 
-  const plan = await getPlanForPo(id);
+  const [plan, schedule, history] = await Promise.all([
+    getPlanForPo(id),
+    getPaymentSchedule(id),
+    getPlanHistory(id),
+  ]);
   const currency = po.project.currency;
   const receivedMinor = sumMinor(
     po.coverage.map((line) => lineTotalMinor(line.receivedQty, line.unitCostMinor)),
@@ -111,6 +120,14 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
                       </span>
                       {" · "}
                       <Money minor={item.valueMinor} currency={currency} />
+                      {" · "}
+                      <span className="text-slate-600">
+                        {t.vendorPo.payment}{" "}
+                        {item.paymentBasis === "PERCENTAGE"
+                          ? `${item.paymentPercent ?? 0}%`
+                          : formatMoney(item.paymentAmountMinor ?? 0, currency)}
+                        {item.paymentDueDays > 0 && ` +${item.paymentDueDays} ${t.common.days}`}
+                      </span>
                     </p>
                     {item.notes && <p className="mt-1 text-xs italic text-slate-500">{item.notes}</p>}
                   </div>
@@ -157,6 +174,14 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
           </ol>
         )}
       </section>
+
+      <MilestonePayments
+        vendorPoId={id}
+        currency={currency}
+        schedule={schedule}
+        plan={plan}
+        today={toDateInput(new Date())}
+      />
 
       <section className="card mb-6 overflow-hidden">
         <div className="card-header">
@@ -263,6 +288,97 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
           </table>
         )}
       </section>
+
+      {/* Append-only: what changed on the plan and its payments, and who changed it. */}
+      <section className="card mt-6 overflow-hidden">
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">{t.vendorPo.changeLog}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t.vendorPo.changeLogHint}</p>
+          </div>
+        </div>
+        {history.length === 0 ? (
+          <EmptyState title={t.vendorPo.noChangesYet} />
+        ) : (
+          <ol className="divide-y divide-slate-100">
+            {history.map((entry) => (
+              <li key={entry.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3 text-sm">
+                <span className="w-40 shrink-0 text-xs text-slate-500 tabular">
+                  {formatDate(entry.createdAt)}
+                </span>
+                <StatusBadge status={actionStatus(entry.action)} label={actionLabel(entry.action, t)} />
+                <span className="min-w-0 flex-1 text-slate-700">{describeChange(entry, t, currency)}</span>
+                {entry.changedBy && (
+                  <span className="text-xs text-slate-400">{fill(t.vendorPo.changedBy, { name: entry.changedBy })}</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </>
   );
+}
+
+function actionLabel(action: string, t: Dictionary): string {
+  switch (action) {
+    case "PLAN_CREATED":
+      return t.vendorPo.actionPlanCreated;
+    case "MILESTONE_ADDED":
+      return t.vendorPo.actionMilestoneAdded;
+    case "MILESTONE_CANCELLED":
+      return t.vendorPo.actionMilestoneCancelled;
+    case "PAYMENT_RECORDED":
+      return t.vendorPo.actionPaymentRecorded;
+    default:
+      return t.vendorPo.actionMilestoneUpdated;
+  }
+}
+
+const CHANGE_FIELD_LABELS: Record<string, (t: Dictionary) => string> = {
+  plannedDate: (t) => t.vendorPo.changeFieldPlannedDate,
+  label: (t) => t.vendorPo.changeFieldLabel,
+  paymentBasis: (t) => t.vendorPo.changeFieldPaymentBasis,
+  paymentPercent: (t) => t.vendorPo.changeFieldPaymentPercent,
+  paymentAmountMinor: (t) => t.vendorPo.changeFieldPaymentAmount,
+  paymentDueDays: (t) => t.vendorPo.changeFieldPaymentDueDays,
+};
+
+/**
+ * Field-level rows are rebuilt from the stored old/new values so they read in the
+ * viewer's language. The prose summary written at the time is the fallback — it is the
+ * record as it was made, and translating it after the fact would rewrite history.
+ */
+function describeChange(entry: PlanHistoryRow, t: Dictionary, currency: string): string {
+  if (!entry.field || entry.oldValue === null || entry.newValue === null) return entry.summary;
+
+  const fieldKey = entry.field.startsWith("quantity:") ? "quantity" : entry.field;
+  const label =
+    fieldKey === "quantity"
+      ? t.vendorPo.changeFieldQuantity
+      : CHANGE_FIELD_LABELS[fieldKey]?.(t) ?? entry.field;
+
+  const render = (value: string) => {
+    if (fieldKey === "plannedDate") return formatDate(new Date(value));
+    if (fieldKey === "paymentAmountMinor") return formatMoney(Number(value) || 0, currency);
+    if (fieldKey === "paymentPercent") return `${value || 0}%`;
+    return value === "" ? "—" : value;
+  };
+
+  return `${label}: ${render(entry.oldValue)} → ${render(entry.newValue)}`;
+}
+
+/** Reuse the status badge palette so log actions read at a glance. */
+function actionStatus(action: string): string {
+  switch (action) {
+    case "PAYMENT_RECORDED":
+      return "PAID";
+    case "MILESTONE_CANCELLED":
+      return "CANCELLED";
+    case "MILESTONE_ADDED":
+    case "PLAN_CREATED":
+      return "PLANNED";
+    default:
+      return "PARTIAL";
+  }
 }

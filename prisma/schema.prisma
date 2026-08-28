@@ -28,17 +28,19 @@ enum Role {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   name         String
   passwordHash String
-  role         Role      @default(PROJECT_MANAGER)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  role         Role     @default(PROJECT_MANAGER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  managedProjects Project[] @relation("ProjectManager")
-  receivedGrns    GRN[]     @relation("GrnReceivedBy")
+  managedProjects Project[]            @relation("ProjectManager")
+  receivedGrns    GRN[]                @relation("GrnReceivedBy")
+  vendorPayments  VendorPayment[]      @relation("VendorPaymentRecordedBy")
+  planChanges     DeliveryPlanChange[] @relation("PlanChangedBy")
   sessions        Session[]
 }
 
@@ -226,12 +228,14 @@ model VendorPO {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 
-  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  vendor          Vendor             @relation(fields: [vendorId], references: [id])
-  clientAgreement ClientAgreement?   @relation(fields: [clientAgreementId], references: [id])
+  project         Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor          Vendor               @relation(fields: [vendorId], references: [id])
+  clientAgreement ClientAgreement?     @relation(fields: [clientAgreementId], references: [id])
   lines           VendorPOLine[]
   planItems       DeliveryPlanItem[]
   grns            GRN[]
+  vendorPayments  VendorPayment[]
+  planChanges     DeliveryPlanChange[]
 
   @@index([projectId])
   @@index([vendorId])
@@ -268,6 +272,24 @@ enum DeliveryPlanItemStatus {
   CANCELLED
 }
 
+/// How a milestone's payment is expressed. A percentage follows the PO value if the
+/// order is later revised; a fixed amount does not, which suits mobilisation fees and
+/// other flat charges.
+enum PaymentBasis {
+  PERCENTAGE
+  FIXED
+}
+
+/// What happened to a delivery plan. Every change is recorded — plans get renegotiated
+/// and "who moved this date" must be answerable months later.
+enum PlanChangeAction {
+  PLAN_CREATED
+  MILESTONE_ADDED
+  MILESTONE_UPDATED
+  MILESTONE_CANCELLED
+  PAYMENT_RECORDED
+}
+
 /// A promised delivery from the vendor. "Overdue" is derived at read time from
 /// plannedDate vs. today, never stored, so it can't go stale.
 model DeliveryPlanItem {
@@ -281,19 +303,80 @@ model DeliveryPlanItem {
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
 
-  vendorPo VendorPO           @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  // What we owe the vendor when this milestone is met. Exactly one of paymentPercent
+  // (basis PERCENTAGE) or paymentAmountMinor (basis FIXED) carries the value; the
+  // amount due is always derived by src/server/services/vendorPayment.ts so a
+  // percentage cannot go stale against a revised PO.
+  paymentBasis       PaymentBasis @default(PERCENTAGE)
+  paymentPercent     Float?
+  paymentAmountMinor Int?
+  /// Payment terms: days after the milestone is met before the money is due.
+  paymentDueDays     Int          @default(0)
+
+  vendorPo VendorPO             @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
   lines    DeliveryPlanLine[]
   grns     GRN[]
+  payments VendorPayment[]
+  changes  DeliveryPlanChange[]
 
   @@unique([vendorPoId, seq])
   @@index([plannedDate])
 }
 
+/// Money actually paid to the vendor against a milestone — the outgoing counterpart to
+/// Payment, which records money coming in from the client.
+model VendorPayment {
+  id           String   @id @default(cuid())
+  planItemId   String
+  vendorPoId   String
+  amountMinor  Int
+  paidDate     DateTime @default(now())
+  method       String?
+  reference    String?
+  notes        String?
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  planItem   DeliveryPlanItem @relation(fields: [planItemId], references: [id], onDelete: Cascade)
+  vendorPo   VendorPO         @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  recordedBy User?            @relation("VendorPaymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([planItemId])
+  @@index([vendorPoId])
+  @@index([paidDate])
+}
+
+/// Audit trail for the delivery plan and its payment terms.
+///
+/// Append-only: rows are never updated or deleted, so the history of a renegotiated
+/// schedule stays intact even after the milestone itself is changed again.
+model DeliveryPlanChange {
+  id          String           @id @default(cuid())
+  vendorPoId  String
+  planItemId  String?
+  action      PlanChangeAction
+  /// Which attribute moved, e.g. "plannedDate" or "paymentPercent". Null for whole-item events.
+  field       String?
+  oldValue    String?
+  newValue    String?
+  /// Human-readable line for the history panel.
+  summary     String
+  changedById String?
+  createdAt   DateTime         @default(now())
+
+  vendorPo  VendorPO          @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  planItem  DeliveryPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+  changedBy User?             @relation("PlanChangedBy", fields: [changedById], references: [id])
+
+  @@index([vendorPoId, createdAt])
+  @@index([planItemId])
+}
+
 model DeliveryPlanLine {
-  id               String @id @default(cuid())
-  planItemId       String
-  vendorPoLineId   String
-  plannedQuantity  Float
+  id              String @id @default(cuid())
+  planItemId      String
+  vendorPoLineId  String
+  plannedQuantity Float
 
   planItem     DeliveryPlanItem @relation(fields: [planItemId], references: [id], onDelete: Cascade)
   vendorPoLine VendorPOLine     @relation(fields: [vendorPoLineId], references: [id], onDelete: Cascade)
@@ -334,13 +417,13 @@ model GRN {
 }
 
 model GRNLine {
-  id                String  @id @default(cuid())
-  grnId             String
-  vendorPoLineId    String
-  quantityReceived  Float
-  quantityAccepted  Float
-  quantityRejected  Float   @default(0)
-  remarks           String?
+  id               String  @id @default(cuid())
+  grnId            String
+  vendorPoLineId   String
+  quantityReceived Float
+  quantityAccepted Float
+  quantityRejected Float   @default(0)
+  remarks          String?
 
   grn          GRN          @relation(fields: [grnId], references: [id], onDelete: Cascade)
   vendorPoLine VendorPOLine @relation(fields: [vendorPoLineId], references: [id])

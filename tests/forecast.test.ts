@@ -50,6 +50,9 @@ async function setup(planItems: Array<{ label: string; plannedDate: Date; quanti
       plannedDate: item.plannedDate,
       notes: null,
       quantities: item.quantities,
+      paymentBasis: "PERCENTAGE" as const,
+      paymentPercent: 100 / Math.max(1, planItems.length),
+      paymentDueDays: 0,
     })),
   });
 

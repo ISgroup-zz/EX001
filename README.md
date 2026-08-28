@@ -139,6 +139,30 @@ errand: it defaults to one tranche for the full quantity on the expected date, a
 splits into N shipments with one click. Planning more than was ordered is rejected;
 planning less is allowed but flagged as unplanned quantity.
 
+### Every milestone carries a payment
+
+Each planned delivery also says what the vendor is paid for meeting it — either a
+**percentage of the order** or a **fixed amount** (a mobilisation fee that shouldn't
+move with the order), plus payment terms in days. Percentages are *derived* from the
+PO's current net value on every read rather than stored as a figure, so repricing a
+line can never leave a payment schedule quietly disagreeing with the order it belongs
+to. A schedule may not promise more than the order is worth; under-scheduling is allowed
+and reported as "not yet scheduled". Both the wizard and the PO page reconcile the
+schedule against the order value as you type.
+
+Money becomes **payable when the goods actually arrive** — the milestone's posted GRN —
+plus its terms in days. Terms run from the real delivery date, not the planned one, so
+rescheduling a milestone after delivery cannot move money that is already owed. Actual
+payments are recorded against the milestone they settle, and a milestone can be neither
+revalued below what has been paid nor cancelled once it has been paid against.
+
+### Plan changes are logged, not overwritten
+
+Delivery dates and payment terms get renegotiated, and months later somebody has to
+answer "who moved this, and when?". Every change is appended to a **change log** on the
+PO — field by field, with the old and new value, the person and the timestamp — so the
+history survives further edits to the same milestone. Rows are never updated or deleted.
+
 ### Goods receipts are the actual deliveries
 
 A GRN posts against vendor PO lines, normally against the planned tranche it fulfils —
@@ -192,6 +216,8 @@ src/server/services/          ALL business rules live here, not in components
   ├── agreement.ts            client documents
   ├── vendorPo.ts             vendor orders, pull-from-client lines
   ├── deliveryPlan.ts         planned deliveries, split helpers, coverage
+  ├── vendorPayment.ts        milestone payment terms, payables, actual payments
+  ├── planChangeLog.ts        append-only audit trail for the plan and its payments
   ├── grn.ts                  receipt rules, pre-filled drafts, posting
   ├── invoice.ts              billable quantities, issuing, payments
   ├── forecast.ts             planned vs. actual, cash, schedule health

@@ -50,6 +50,9 @@ async function makePo(options: { planItems?: Array<{ label: string; plannedDate:
       plannedDate: item.plannedDate,
       notes: null,
       quantities: item.quantities,
+      paymentBasis: "PERCENTAGE" as const,
+      paymentPercent: 100 / Math.max(1, (options.planItems ?? []).length),
+      paymentDueDays: 0,
     })),
   });
 

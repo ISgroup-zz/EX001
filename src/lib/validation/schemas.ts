@@ -150,6 +150,24 @@ export const deliveryPlanItemSchema = z.object({
   notes: optionalText,
   /** Planned quantity per PO line, keyed by the line's index in the submitted PO. */
   quantities: z.array(z.union([z.string(), z.number()])).transform((values) => values.map((v) => parseQty(v))),
+  /** What we owe the vendor when this milestone is met. */
+  paymentBasis: z.enum(["PERCENTAGE", "FIXED"]).default("PERCENTAGE"),
+  paymentPercent: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => {
+      if (value === undefined || value === "") return 0;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }),
+  paymentAmountMinor: moneyToMinor.optional(),
+  paymentDueDays: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => {
+      const parsed = Number(value ?? 0);
+      return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
+    }),
 });
 
 export const vendorPoSchema = z
@@ -165,7 +183,9 @@ export const vendorPoSchema = z
     expectedDeliveryDate: optionalDateInput,
     notes: optionalText,
     lines: z.array(vendorPoLineSchema).min(1, "A purchase order needs at least one line."),
-    planItems: z.array(deliveryPlanItemSchema).default([]),
+    planItems: z
+      .array(deliveryPlanItemSchema)
+      .min(1, "A purchase order needs a delivery plan with at least one milestone."),
   })
   .superRefine((value, ctx) => {
     value.planItems.forEach((item, index) => {

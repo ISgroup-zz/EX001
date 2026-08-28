@@ -11,7 +11,11 @@ import { createPlanItems, generateDefaultPlan, getPoCoverage, type PlanItemInput
  * both saves the PM typing and sets the client-line link that later makes billing automatic.
  */
 
-export async function createVendorPo(input: VendorPoInput, db: Db = prisma): Promise<{ id: string; poNumber: string }> {
+export async function createVendorPo(
+  input: VendorPoInput,
+  db: Db = prisma,
+  userId: string | null = null,
+): Promise<{ id: string; poNumber: string }> {
   const project = await db.project.findUnique({ where: { id: input.projectId }, select: { id: true } });
   if (!project) throw new Error("Project not found.");
 
@@ -54,6 +58,12 @@ export async function createVendorPo(input: VendorPoInput, db: Db = prisma): Pro
       vendorPoLineId: line.id,
       quantity: item.quantities[index] ?? 0,
     })),
+    payment: {
+      basis: item.paymentBasis,
+      percent: item.paymentPercent,
+      amountMinor: item.paymentAmountMinor ?? 0,
+      dueDays: item.paymentDueDays,
+    },
   }));
 
   const plan =
@@ -65,7 +75,7 @@ export async function createVendorPo(input: VendorPoInput, db: Db = prisma): Pro
           input.expectedDeliveryDate ?? input.issueDate,
         );
 
-  await createPlanItems(po.id, plan, db);
+  await createPlanItems(po.id, plan, db, userId, true);
 
   return { id: po.id, poNumber: po.poNumber };
 }

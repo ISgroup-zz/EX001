@@ -8,6 +8,7 @@ import { formatMoney, formatQty, parseMoneyToMinor, parseQty, roundQty, splitQua
 import { addMonths, addWeeks, toDateInput } from "@/lib/dates";
 import type { OrderableAgreementLine } from "@/server/services/vendorPo";
 import { useT } from "./LocaleProvider";
+import { fill } from "@/lib/i18n";
 
 /**
  * Raising a vendor PO, in three steps that mirror how a PM actually works:
@@ -37,10 +38,24 @@ type PlanRow = {
   label: string;
   plannedDate: string;
   quantities: string[];
+  /** What the vendor is paid for this milestone: a share of the order, or a set figure. */
+  paymentBasis: "PERCENTAGE" | "FIXED";
+  paymentPercent: string;
+  paymentAmount: string;
+  /** Days after the milestone is met before the money falls due. */
+  paymentDueDays: string;
 };
 
 let keyCounter = 0;
 const nextKey = () => `row-${keyCounter++}`;
+
+/** Split 100% across n milestones, remainder on the last so it totals exactly 100. */
+const evenShares = (parts: number): number[] => {
+  const each = Math.floor((100 / parts) * 100) / 100;
+  const shares = Array.from({ length: parts }, () => each);
+  shares[parts - 1] = Math.round((100 - each * (parts - 1)) * 100) / 100;
+  return shares;
+};
 
 const blankLine = (): PoLine => ({
   key: nextKey(),
@@ -126,22 +141,33 @@ export function VendorPoForm({
   const singleTranche = (): PlanRow[] => [
     {
       key: nextKey(),
-      label: "Full delivery",
+      label: t.vendorPo.fullDelivery,
       plannedDate: expectedDate,
       quantities: activeLines.map((line) => String(parseQty(line.quantity))),
+      // One delivery means the whole order is payable on it.
+      paymentBasis: "PERCENTAGE",
+      paymentPercent: "100",
+      paymentAmount: "",
+      paymentDueDays: "0",
     },
   ];
 
   const splitInto = (parts: number, cadence: "weeks" | "months") => {
     const perLine = activeLines.map((line) => splitQuantityEvenly(parseQty(line.quantity), parts));
     const start = new Date(`${expectedDate}T00:00:00.000Z`);
+    const shares = evenShares(parts);
 
     setPlanRows(
       Array.from({ length: parts }, (_, index) => ({
         key: nextKey(),
-        label: `Shipment ${index + 1} of ${parts}`,
+        label: fill(t.vendorPo.shipmentNOfM, { n: index + 1, total: parts }),
         plannedDate: toDateInput(cadence === "months" ? addMonths(start, index) : addWeeks(start, index * 4)),
         quantities: activeLines.map((_, lineIndex) => String(perLine[lineIndex][index])),
+        // Pay pro-rata with delivery by default; the PM can reweight any row.
+        paymentBasis: "PERCENTAGE" as const,
+        paymentPercent: String(shares[index]),
+        paymentAmount: "",
+        paymentDueDays: "0",
       })),
     );
   };
@@ -156,11 +182,18 @@ export function VendorPoForm({
       ...current,
       {
         key: nextKey(),
-        label: `Shipment ${current.length + 1}`,
+        label: fill(t.vendorPo.shipmentN, { n: current.length + 1 }),
         plannedDate: expectedDate,
         quantities: activeLines.map(() => "0"),
+        paymentBasis: "PERCENTAGE" as const,
+        paymentPercent: "0",
+        paymentAmount: "",
+        paymentDueDays: "0",
       },
     ]);
+
+  const setPlanField = (key: string, patch: Partial<PlanRow>) =>
+    setPlanRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
 
   const setPlanCell = (key: string, index: number, value: string) =>
     setPlanRows((current) =>
@@ -202,6 +235,32 @@ export function VendorPoForm({
   const hasOverPlan = coverage.some((entry) => entry.over);
   const hasUnderPlan = coverage.some((entry) => entry.under);
 
+  /** What each milestone is worth, and whether the schedule reconciles to the order. */
+  const milestoneDue = (row: PlanRow) =>
+    row.paymentBasis === "FIXED"
+      ? parseMoneyToMinor(row.paymentAmount)
+      : Math.round((totals.net * (Number(row.paymentPercent) || 0)) / 100);
+
+  const scheduledMinor = planRows.reduce((sum, row) => sum + milestoneDue(row), 0);
+  const unscheduledMinor = totals.net - scheduledMinor;
+  const overScheduled = scheduledMinor > totals.net;
+
+  /** Put whatever value is unallocated onto the last milestone. */
+  const balancePayments = () =>
+    setPlanRows((current) => {
+      if (current.length === 0 || totals.net <= 0) return current;
+      const last = current.length - 1;
+      const others = current.reduce((sum, row, index) => (index === last ? sum : sum + milestoneDue(row)), 0);
+      const remainderMinor = Math.max(0, totals.net - others);
+
+      return current.map((row, index) => {
+        if (index !== last) return row;
+        return row.paymentBasis === "FIXED"
+          ? { ...row, paymentAmount: (remainderMinor / 100).toFixed(2) }
+          : { ...row, paymentPercent: String(Math.round((remainderMinor / totals.net) * 10000) / 100) };
+      });
+    });
+
   const serialisedLines = activeLines.map((line) => ({
     description: line.description,
     uom: line.uom,
@@ -215,6 +274,10 @@ export function VendorPoForm({
     label: row.label,
     plannedDate: row.plannedDate,
     quantities: row.quantities,
+    paymentBasis: row.paymentBasis,
+    paymentPercent: row.paymentPercent,
+    paymentAmount: row.paymentAmount,
+    paymentDueDays: row.paymentDueDays,
   }));
 
   const steps = [t.vendorPo.stepVendor, t.vendorPo.stepLines, t.vendorPo.stepPlan];
@@ -547,8 +610,20 @@ export function VendorPoForm({
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: "180px" }}>{t.vendorPo.label}</th>
-                  <th style={{ width: "160px" }}>{t.vendorPo.plannedDate}</th>
+                  <th style={{ width: "170px" }}>{t.vendorPo.label}</th>
+                  <th style={{ width: "150px" }}>{t.vendorPo.plannedDate}</th>
+                  <th style={{ width: "210px" }}>
+                    {t.vendorPo.payment}
+                    <span className="block text-[10px] font-normal normal-case text-slate-400">
+                      {t.vendorPo.paymentColumnHint}
+                    </span>
+                  </th>
+                  <th className="num text-end" style={{ width: "100px" }}>
+                    {t.vendorPo.paymentTerms}
+                    <span className="block text-[10px] font-normal normal-case text-slate-400">
+                      {t.vendorPo.daysAfterDelivery}
+                    </span>
+                  </th>
                   {activeLines.map((line) => (
                     <th key={line.key} className="num text-end">
                       <span className="block max-w-[140px] truncate">{line.description}</span>
@@ -586,6 +661,53 @@ export function VendorPoForm({
                             ),
                           )
                         }
+                      />
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-1">
+                        <select
+                          className="grid-input w-[92px]"
+                          value={row.paymentBasis}
+                          aria-label={t.vendorPo.paymentBasis}
+                          onChange={(event) =>
+                            setPlanField(row.key, { paymentBasis: event.target.value as PlanRow["paymentBasis"] })
+                          }
+                        >
+                          <option value="PERCENTAGE">{t.vendorPo.basisPercent}</option>
+                          <option value="FIXED">{t.vendorPo.basisFixed}</option>
+                        </select>
+                        {row.paymentBasis === "PERCENTAGE" ? (
+                          <input
+                            className="grid-input w-[64px] text-end tabular"
+                            inputMode="decimal"
+                            value={row.paymentPercent}
+                            aria-label={t.vendorPo.percentOfPo}
+                            onChange={(event) => setPlanField(row.key, { paymentPercent: event.target.value })}
+                          />
+                        ) : (
+                          <input
+                            className="grid-input w-[88px] text-end tabular"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={row.paymentAmount}
+                            aria-label={t.vendorPo.fixedAmount}
+                            onChange={(event) => setPlanField(row.key, { paymentAmount: event.target.value })}
+                          />
+                        )}
+                      </div>
+                      {row.paymentBasis === "PERCENTAGE" && totals.net > 0 && (
+                        <span className="mt-0.5 block text-[11px] text-slate-500 tabular">
+                          = {formatMoney(milestoneDue(row), currency)}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <input
+                        className="grid-input text-end tabular"
+                        inputMode="numeric"
+                        value={row.paymentDueDays}
+                        aria-label={t.vendorPo.paymentTerms}
+                        onChange={(event) => setPlanField(row.key, { paymentDueDays: event.target.value })}
                       />
                     </td>
                     {activeLines.map((line, index) => (
@@ -645,7 +767,51 @@ export function VendorPoForm({
               })}
             </ul>
           </div>
+
+          {/* The payment schedule has to reconcile to the order just as the quantities do. */}
+          <div className="border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {t.vendorPo.paymentSchedule}
+              </h3>
+              {unscheduledMinor !== 0 && totals.net > 0 && (
+                <button type="button" className="btn-secondary btn-sm" onClick={balancePayments}>
+                  {t.vendorPo.balancePayments}
+                </button>
+              )}
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-xs text-slate-500">{t.vendorPo.orderValue}</dt>
+                <dd className="font-semibold text-slate-900 tabular">{formatMoney(totals.net, currency)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">{t.vendorPo.scheduled}</dt>
+                <dd className={`font-semibold tabular ${overScheduled ? "text-red-700" : "text-slate-900"}`}>
+                  {formatMoney(scheduledMinor, currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">
+                  {unscheduledMinor < 0 ? t.vendorPo.overScheduledBy : t.vendorPo.unscheduled}
+                </dt>
+                <dd
+                  className={`font-semibold tabular ${
+                    unscheduledMinor < 0 ? "text-red-700" : unscheduledMinor > 0 ? "text-amber-700" : "text-emerald-700"
+                  }`}
+                >
+                  {formatMoney(Math.abs(unscheduledMinor), currency)}
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
+
+        {overScheduled && (
+          <Alert tone="danger" title={t.vendorPo.overScheduled}>
+            {t.vendorPo.overScheduledHint}
+          </Alert>
+        )}
 
         {hasOverPlan && (
           <Alert tone="danger" title={t.vendorPo.overPlanned}>
