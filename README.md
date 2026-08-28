@@ -21,8 +21,7 @@ Vendor ─┘           │   (PO │ CONTRACT │ FRAMEWORK │ VARIATION)   �
 
 The app runs on **PostgreSQL**, which Railway provides as a managed service.
 
-1. **New Project → Deploy from GitHub repo** → `ISgroup-zz/EX001`, branch
-   `claude/procurement-project-app-7vz23p`.
+1. **New Project → Deploy from GitHub repo** → `ISgroup-zz/ProPM`, branch `main`.
 2. **+ New → Database → Add PostgreSQL**.
 3. **Link the two — this does not happen on its own.** Adding the database does *not*
    give the app its connection string. On the **app** service → **Variables**, add:
