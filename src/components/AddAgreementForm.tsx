@@ -6,6 +6,8 @@ import { FormMessage, SubmitButton } from "./Form";
 import { Alert, Field } from "./ui";
 import { addAgreementAction } from "@/server/actions/projects";
 import { formatMoney } from "@/lib/money";
+import { useT } from "./LocaleProvider";
+import { fill } from "@/lib/i18n";
 
 /**
  * Adding a further client document to a live project — the thing that moves the budget.
@@ -24,21 +26,6 @@ export type ParentOption = {
   remainingMinor?: number;
 };
 
-const LINE_COLUMNS = [
-  { key: "description", label: "Description", type: "text" as const },
-  { key: "uom", label: "UoM", type: "text" as const, width: "80px", placeholder: "EA" },
-  { key: "quantity", label: "Qty", type: "qty" as const, width: "100px" },
-  { key: "unitPrice", label: "Unit price", type: "money" as const, width: "130px" },
-  { key: "taxRatePct", label: "Tax %", type: "percent" as const, width: "90px" },
-];
-
-const TYPES = [
-  { value: "PO", label: "Purchase order", blurb: "Adds its line total to the budget." },
-  { value: "CONTRACT", label: "Contract", blurb: "Adds its contract value to the budget." },
-  { value: "FRAMEWORK", label: "Framework", blurb: "Adds its ceiling; call-offs draw it down." },
-  { value: "VARIATION", label: "Variation order", blurb: "Amends a contract or framework, up or down." },
-] as const;
-
 export function AddAgreementForm({
   projectId,
   currency,
@@ -56,6 +43,23 @@ export function AddAgreementForm({
   const [type, setType] = useState<string>("PO");
   const [isCallOff, setIsCallOff] = useState(false);
   const [parentId, setParentId] = useState("");
+  const t = useT();
+
+  // Built per render so the labels translate with the rest of the UI.
+  const TYPES = [
+    { value: "PO", label: t.documentTypes.PO, blurb: t.agreements.poEffect },
+    { value: "CONTRACT", label: t.documentTypes.CONTRACT, blurb: t.agreements.contractEffect },
+    { value: "FRAMEWORK", label: t.documentTypes.FRAMEWORK, blurb: t.agreements.frameworkEffect },
+    { value: "VARIATION", label: t.documentTypes.VARIATION, blurb: t.agreements.variationEffect },
+  ] as const;
+
+  const LINE_COLUMNS = [
+    { key: "description", label: t.common.description, type: "text" as const },
+    { key: "uom", label: t.common.uom, type: "text" as const, width: "80px", placeholder: "EA" },
+    { key: "quantity", label: t.common.quantity, type: "qty" as const, width: "100px" },
+    { key: "unitPrice", label: t.common.unitPrice, type: "money" as const, width: "130px" },
+    { key: "taxRatePct", label: `${t.common.tax} %`, type: "percent" as const, width: "90px" },
+  ];
 
   const isFramework = type === "FRAMEWORK";
   const isVariation = type === "VARIATION";
@@ -72,7 +76,7 @@ export function AddAgreementForm({
       <FormMessage state={state} />
 
       <div>
-        <p className="label">Document type</p>
+        <p className="label">{t.agreements.documentType}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {TYPES.map((option) => (
             <button
@@ -84,7 +88,7 @@ export function AddAgreementForm({
                 setIsCallOff(false);
               }}
               disabled={option.value === "VARIATION" && amendable.length === 0}
-              className={`rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`rounded-xl border p-4 text-start transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 type === option.value
                   ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500"
                   : "border-slate-200 bg-white hover:border-slate-300"
@@ -96,7 +100,7 @@ export function AddAgreementForm({
           ))}
         </div>
         {amendable.length === 0 && (
-          <p className="field-hint">A variation needs a contract or framework on the project to amend.</p>
+          <p className="field-hint">{t.agreements.variationNeedsParent}</p>
         )}
       </div>
 
@@ -109,10 +113,9 @@ export function AddAgreementForm({
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
           />
           <span className="text-sm">
-            <span className="font-medium text-slate-900">This is a call-off against a framework</span>
+            <span className="font-medium text-slate-900">{t.agreements.isCallOff}</span>
             <span className="mt-0.5 block text-xs text-slate-600">
-              A call-off draws down the framework&apos;s ceiling instead of adding to the budget — that money was already
-              counted when the framework was recorded.
+              {t.agreements.isCallOffHint}
             </span>
           </span>
         </label>
@@ -120,7 +123,7 @@ export function AddAgreementForm({
 
       {showParent && (
         <div className="card p-5">
-          <Field label={isVariation ? "Document being amended" : "Framework to draw on"} htmlFor="parentSelect">
+          <Field label={isVariation ? t.agreements.documentBeingAmended : t.agreements.frameworkToDrawOn} htmlFor="parentSelect">
             <select
               id="parentSelect"
               className="select"
@@ -129,7 +132,7 @@ export function AddAgreementForm({
               onChange={(event) => setParentId(event.target.value)}
             >
               <option value="" disabled>
-                Choose…
+                {t.agreements.choose}
               </option>
               {parentOptions.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -142,8 +145,7 @@ export function AddAgreementForm({
           {selectedFramework?.remainingMinor !== undefined && (
             <div className="mt-3">
               <Alert tone="info">
-                {formatMoney(selectedFramework.remainingMinor, currency)} remains on {selectedFramework.reference}. A
-                call-off larger than that will be rejected.
+                {fill(t.agreements.remainsOn, { amount: formatMoney(selectedFramework.remainingMinor, currency), reference: selectedFramework.reference })}
               </Alert>
             </div>
           )}
@@ -152,34 +154,34 @@ export function AddAgreementForm({
 
       <div className="card space-y-5 p-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Client's document no." htmlFor="reference">
-            <input id="reference" name="reference" required className="input" placeholder="e.g. NW-PO-89117" />
+          <Field label={t.projects.clientDocNo} htmlFor="reference">
+            <input id="reference" name="reference" required className="input" placeholder={t.projects.docNoPlaceholder} />
           </Field>
-          <Field label="Title" htmlFor="title" className="sm:col-span-2">
-            <input id="title" name="title" className="input" placeholder="Short description of the scope" />
+          <Field label={t.common.title} htmlFor="title" className="sm:col-span-2">
+            <input id="title" name="title" className="input" placeholder={t.projects.titlePlaceholder} />
           </Field>
-          <Field label="Issue date" htmlFor="issueDate">
+          <Field label={t.projects.issueDate} htmlFor="issueDate">
             <input id="issueDate" name="issueDate" type="date" required defaultValue={today} className="input" />
           </Field>
         </div>
 
         {isFramework ? (
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Ceiling value" htmlFor="declaredValue" hint="The maximum this framework covers.">
+            <Field label={t.projects.ceilingValue} htmlFor="declaredValue" hint={t.projects.ceilingHint}>
               <input id="declaredValue" name="declaredValue" required className="input tabular" placeholder="1500000" />
             </Field>
-            <Field label="Valid from" htmlFor="validFrom">
+            <Field label={t.projects.validFrom} htmlFor="validFrom">
               <input id="validFrom" name="validFrom" type="date" className="input" />
             </Field>
-            <Field label="Valid to" htmlFor="validTo">
+            <Field label={t.projects.validTo} htmlFor="validTo">
               <input id="validTo" name="validTo" type="date" className="input" />
             </Field>
           </div>
         ) : (
           <Field
-            label="Lump-sum value (optional)"
+            label={t.projects.lumpSum}
             htmlFor="declaredValue"
-            hint="Only when the document has a headline value and no line detail."
+            hint={t.projects.lumpSumHint}
           >
             <input id="declaredValue" name="declaredValue" className="input tabular sm:max-w-xs" placeholder="0.00" />
           </Field>
@@ -187,23 +189,23 @@ export function AddAgreementForm({
 
         {!isFramework && (
           <div>
-            <p className="label">Lines</p>
+            <p className="label">{t.common.lines}</p>
             {isVariation && (
               <p className="field-hint mb-2">
-                For a reduction, enter a negative quantity — the variation&apos;s value comes off the budget.
+                {t.agreements.negativeHint}
               </p>
             )}
             <LineItemsEditor name="lines" columns={LINE_COLUMNS} currency={currency} />
           </div>
         )}
 
-        <Field label="Notes" htmlFor="notes">
+        <Field label={t.common.notes} htmlFor="notes">
           <textarea id="notes" name="notes" className="textarea" />
         </Field>
       </div>
 
       <div className="flex justify-end gap-2">
-        <SubmitButton pendingLabel="Recording…">Record document</SubmitButton>
+        <SubmitButton pendingLabel={t.agreements.recording}>{t.agreements.recordDocument}</SubmitButton>
       </div>
     </form>
   );

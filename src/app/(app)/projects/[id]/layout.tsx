@@ -7,6 +7,7 @@ import { getProjectSummary } from "@/server/services/reporting";
 import { prisma } from "@/server/db";
 import { formatDate } from "@/lib/dates";
 import { formatMoneyCompact, formatPercent } from "@/lib/money";
+import { getT } from "@/server/locale";
 
 /** Header, headline numbers and tabs shared by every project screen. */
 export default async function ProjectLayout({
@@ -30,12 +31,13 @@ export default async function ProjectLayout({
     ]),
   ]);
   const [agreementCount, poCount, grnCount, invoiceCount] = counts;
+  const t = await getT();
 
   return (
     <>
       <PageHeader
         title={project.name}
-        breadcrumb={[{ label: "Projects", href: "/projects" }, { label: project.code }]}
+        breadcrumb={[{ label: t.projects.title, href: "/projects" }, { label: project.code }]}
         subtitle={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <StatusBadge status={project.status} />
@@ -45,14 +47,14 @@ export default async function ProjectLayout({
             {project.manager && (
               <>
                 <span className="text-slate-300">·</span>
-                <span>PM {project.manager.name}</span>
+                <span>{t.projects.projectManager}: {project.manager.name}</span>
               </>
             )}
             {project.originatingAgreement && (
               <>
                 <span className="text-slate-300">·</span>
                 <span className="inline-flex items-center gap-1.5">
-                  opened on
+                  {t.projects.openedOn}
                   <Link href={`/agreements/${project.originatingAgreement.id}`} className="link tabular">
                     {project.originatingAgreement.reference}
                   </Link>
@@ -62,7 +64,7 @@ export default async function ProjectLayout({
             {project.targetDate && (
               <>
                 <span className="text-slate-300">·</span>
-                <span>target {formatDate(project.targetDate)}</span>
+                <span>{t.projects.target} {formatDate(project.targetDate)}</span>
               </>
             )}
           </span>
@@ -70,10 +72,10 @@ export default async function ProjectLayout({
         actions={
           <>
             <Link href={`/projects/${id}/agreements/new`} className="btn-secondary">
-              Add client document
+              {t.projects.addClientDocument}
             </Link>
             <Link href={`/projects/${id}/vendor-pos/new`} className="btn-primary">
-              New vendor PO
+              {t.vendorPo.newVendorPo}
             </Link>
           </>
         }
@@ -81,42 +83,42 @@ export default async function ProjectLayout({
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
-          label="Budget"
+          label={t.projects.budget}
           value={formatMoneyCompact(summary.budgetMinor, project.currency)}
-          hint={`${agreementCount} client document${agreementCount === 1 ? "" : "s"}`}
+          hint={`${agreementCount} ${agreementCount === 1 ? t.projects.clientDocumentCountOne : t.projects.clientDocumentCount}`}
         />
         <KpiCard
-          label="Committed cost"
+          label={t.projects.committedCost}
           value={formatMoneyCompact(summary.committedCostMinor, project.currency)}
-          hint={`Received ${formatMoneyCompact(summary.receivedCostMinor, project.currency)}`}
+          hint={`${t.dashboard.received} ${formatMoneyCompact(summary.receivedCostMinor, project.currency)}`}
         />
         <KpiCard
-          label="Margin"
+          label={t.dashboard.margin}
           value={formatMoneyCompact(summary.marginMinor, project.currency)}
           hint={formatPercent(summary.marginPct)}
           tone={summary.marginMinor >= 0 ? "positive" : "negative"}
         />
         <KpiCard
-          label="Invoiced"
+          label={t.projects.invoiced}
           value={formatMoneyCompact(summary.invoicedNetMinor, project.currency)}
-          hint={`${formatMoneyCompact(summary.budgetRemainingMinor, project.currency)} of budget left`}
+          hint={`${formatMoneyCompact(summary.budgetRemainingMinor, project.currency)} ${t.projects.ofBudgetLeft}`}
         />
         <KpiCard
-          label="Ready to invoice"
+          label={t.dashboard.readyToInvoice}
           value={formatMoneyCompact(summary.unbilledDeliveredMinor, project.currency)}
-          hint="Delivered, not yet billed"
+          hint={t.projects.deliveredNotYetBilled}
           tone={summary.unbilledDeliveredMinor > 0 ? "warning" : "default"}
         />
       </section>
 
       <Tabs
         tabs={[
-          { href: `/projects/${id}`, label: "Overview" },
-          { href: `/projects/${id}/agreements`, label: "Client documents", badge: agreementCount },
-          { href: `/projects/${id}/vendor-pos`, label: "Vendor POs", badge: poCount },
-          { href: `/projects/${id}/grns`, label: "Goods receipts", badge: grnCount },
-          { href: `/projects/${id}/invoices`, label: "Invoices", badge: invoiceCount },
-          { href: `/projects/${id}/forecast`, label: "Forecast" },
+          { href: `/projects/${id}`, label: t.projects.overview },
+          { href: `/projects/${id}/agreements`, label: t.projects.clientDocuments, badge: agreementCount },
+          { href: `/projects/${id}/vendor-pos`, label: t.projects.vendorPos, badge: poCount },
+          { href: `/projects/${id}/grns`, label: t.projects.goodsReceipts, badge: grnCount },
+          { href: `/projects/${id}/invoices`, label: t.projects.invoices, badge: invoiceCount },
+          { href: `/projects/${id}/forecast`, label: t.projects.forecast },
         ]}
       />
 

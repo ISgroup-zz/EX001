@@ -2,8 +2,7 @@ import { notFound } from "next/navigation";
 import { GrnForm } from "@/components/GrnForm";
 import { PageHeader } from "@/components/ui";
 import { startGrnDraft } from "@/server/services/grn";
-
-export const metadata = { title: "Receive goods · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 export default async function NewGrnPage({
   params,
@@ -13,6 +12,7 @@ export default async function NewGrnPage({
   searchParams: Promise<{ planItemId?: string }>;
 }) {
   const [{ id }, { planItemId }] = await Promise.all([params, searchParams]);
+  const t = await getT();
 
   let draft;
   try {
@@ -24,12 +24,12 @@ export default async function NewGrnPage({
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader
-        title="Receive goods"
+        title={t.grn.receiveGoods}
         breadcrumb={[
-          { label: "Projects", href: "/projects" },
+          { label: t.projects.title, href: "/projects" },
           { label: draft.projectName, href: `/projects/${draft.projectId}` },
           { label: draft.poNumber, href: `/vendor-pos/${id}` },
-          { label: "Receive" },
+          { label: t.grn.receiveTitle },
         ]}
         subtitle={`${draft.vendorName} · ${draft.poNumber}`}
       />

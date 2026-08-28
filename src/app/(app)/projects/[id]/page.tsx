@@ -8,6 +8,9 @@ import { getProjectSummary } from "@/server/services/reporting";
 import { getUpcomingDeliveries } from "@/server/services/forecast";
 import { listVendorPos } from "@/server/services/vendorPo";
 import { formatDate, relativeDays } from "@/lib/dates";
+import { fill } from "@/lib/i18n";
+import { getT } from "@/server/locale";
+import { formatMoney } from "@/lib/money";
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,31 +23,32 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     getUpcomingDeliveries({ projectId: id, withinDays: 60 }),
     listVendorPos(id),
   ]);
+  const t = await getT();
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <section className="card lg:col-span-2">
         <div className="card-header">
           <div>
-            <h2 className="card-title">Budget history</h2>
-            <p className="mt-0.5 text-xs text-slate-500">Every client document and what it did to the budget.</p>
+            <h2 className="card-title">{t.projects.budgetHistory}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t.projects.budgetHistoryHint}</p>
           </div>
           <Link href={`/projects/${id}/agreements/new`} className="btn-secondary btn-sm">
-            Add document
+            {t.projects.addDocument}
           </Link>
         </div>
         <div className="p-5">
-          <BudgetTimeline entries={timeline} currency={project.currency} />
+          <BudgetTimeline entries={timeline} currency={project.currency} t={t} />
         </div>
       </section>
 
       <div className="space-y-6">
         <section className="card p-5">
-          <h2 className="card-title mb-3">Where the money stands</h2>
+          <h2 className="card-title mb-3">{t.projects.whereMoneyStands}</h2>
           <dl className="space-y-3 text-sm">
             <div>
               <div className="flex justify-between">
-                <dt className="text-slate-600">Invoiced against budget</dt>
+                <dt className="text-slate-600">{t.projects.invoicedAgainstBudget}</dt>
                 <dd className="font-medium tabular">
                   <Money minor={summary.invoicedNetMinor} currency={project.currency} />
                 </dd>
@@ -55,7 +59,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
             </div>
             <div>
               <div className="flex justify-between">
-                <dt className="text-slate-600">Committed against budget</dt>
+                <dt className="text-slate-600">{t.projects.committedAgainstBudget}</dt>
                 <dd className="font-medium tabular">
                   <Money minor={summary.committedCostMinor} currency={project.currency} />
                 </dd>
@@ -69,19 +73,19 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
               </div>
             </div>
             <div className="flex justify-between border-t border-slate-100 pt-3">
-              <dt className="text-slate-600">Received from vendors</dt>
+              <dt className="text-slate-600">{t.projects.receivedFromVendors}</dt>
               <dd className="font-medium tabular">
                 <Money minor={summary.receivedCostMinor} currency={project.currency} />
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-slate-600">Paid by client</dt>
+              <dt className="text-slate-600">{t.projects.paidByClient}</dt>
               <dd className="font-medium tabular">
                 <Money minor={summary.paidMinor} currency={project.currency} />
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-slate-600">Awaiting payment</dt>
+              <dt className="text-slate-600">{t.projects.awaitingPayment}</dt>
               <dd className="font-medium tabular">
                 <Money minor={summary.outstandingReceivableMinor} currency={project.currency} />
               </dd>
@@ -90,20 +94,20 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
 
           {summary.unbilledDeliveredMinor > 0 && (
             <Link href={`/projects/${id}/invoices/new`} className="btn-primary btn-sm mt-4 w-full">
-              Invoice <Money minor={summary.unbilledDeliveredMinor} currency={project.currency} /> delivered
+              {fill(t.projects.invoiceDelivered, { amount: formatMoney(summary.unbilledDeliveredMinor, project.currency) })}
             </Link>
           )}
         </section>
 
         <section className="card">
           <div className="card-header">
-            <h2 className="card-title">Next deliveries</h2>
+            <h2 className="card-title">{t.projects.nextDeliveries}</h2>
             <Link href={`/projects/${id}/vendor-pos`} className="link text-xs">
-              All POs →
+              {t.projects.allPos}
             </Link>
           </div>
           {deliveries.length === 0 ? (
-            <EmptyState title="Nothing scheduled" description="Planned deliveries appear here once a vendor PO is raised." />
+            <EmptyState title={t.projects.nothingScheduled} description={t.projects.nothingScheduledHint} />
           ) : (
             <ul className="divide-y divide-slate-100">
               {deliveries.slice(0, 6).map((delivery) => (
@@ -114,14 +118,14 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                       {delivery.isOverdue && <StatusBadge status="OVERDUE" />}
                     </div>
                     <p className="text-xs text-slate-500">
-                      {delivery.vendorName} · {formatDate(delivery.plannedDate)} ({relativeDays(delivery.plannedDate)})
+                      {delivery.vendorName} · {formatDate(delivery.plannedDate)} ({relativeDays(delivery.plannedDate, t)})
                     </p>
                   </div>
                   <Link
                     href={`/vendor-pos/${delivery.vendorPoId}/grns/new?planItemId=${delivery.planItemId}`}
                     className="btn-secondary btn-sm shrink-0"
                   >
-                    Receive
+                    {t.dashboard.receive}
                   </Link>
                 </li>
               ))}
@@ -131,7 +135,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
 
         {project.description && (
           <section className="card p-5">
-            <h2 className="card-title mb-2">Scope</h2>
+            <h2 className="card-title mb-2">{t.projects.scope}</h2>
             <p className="whitespace-pre-line text-sm text-slate-600">{project.description}</p>
           </section>
         )}
@@ -139,7 +143,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         {vendorPos.length > 0 && (
           <section className="card">
             <div className="card-header">
-              <h2 className="card-title">Vendor POs</h2>
+              <h2 className="card-title">{t.projects.vendorPos}</h2>
             </div>
             <ul className="divide-y divide-slate-100">
               {vendorPos.slice(0, 5).map((po) => (
@@ -150,7 +154,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                     </Link>
                     <p className="truncate text-xs text-slate-500">{po.vendor.name}</p>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 text-end">
                     <Money minor={po.totals.subtotalMinor} currency={project.currency} className="text-sm" />
                     <div className="mt-0.5">
                       <StatusBadge status={po.status} />

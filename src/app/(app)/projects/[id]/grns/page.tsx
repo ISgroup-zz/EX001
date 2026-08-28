@@ -6,6 +6,8 @@ import { listProjectGrns } from "@/server/services/grn";
 import { getUpcomingDeliveries } from "@/server/services/forecast";
 import { formatDate, daysBetween } from "@/lib/dates";
 import { formatQty, lineTotalMinor, sumMinor } from "@/lib/money";
+import { getT } from "@/server/locale";
+import { fill } from "@/lib/i18n";
 
 export default async function ProjectGrnsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,24 +18,25 @@ export default async function ProjectGrnsPage({ params }: { params: Promise<{ id
     listProjectGrns(id),
     getUpcomingDeliveries({ projectId: id, withinDays: 365 }),
   ]);
+  const t = await getT();
 
   return (
     <div className="space-y-6">
       {upcoming.length > 0 && (
         <section className="card overflow-hidden">
           <div className="card-header">
-            <h2 className="card-title">Still to arrive</h2>
+            <h2 className="card-title">{t.grn.stillToArrive}</h2>
             <Link href="/deliveries" className="link text-xs">
-              All deliveries →
+              {t.dashboard.allDeliveries}
             </Link>
           </div>
           <table className="table table-hover">
             <thead>
               <tr>
-                <th>Planned</th>
-                <th>Delivery</th>
-                <th>Vendor / PO</th>
-                <th className="num text-right">Value</th>
+                <th>{t.dashboard.planned}</th>
+                <th>{t.dashboard.delivery}</th>
+                <th>{t.dashboard.vendorPo}</th>
+                <th className="num text-end">{t.common.value}</th>
                 <th className="w-28" />
               </tr>
             </thead>
@@ -42,7 +45,7 @@ export default async function ProjectGrnsPage({ params }: { params: Promise<{ id
                 <tr key={delivery.planItemId} className={delivery.isOverdue ? "bg-red-50/40" : undefined}>
                   <td className="tabular">
                     {formatDate(delivery.plannedDate)}
-                    {delivery.isOverdue && <span className="ml-2 text-xs font-medium text-red-700">overdue</span>}
+                    {delivery.isOverdue && <span className="ms-2 text-xs font-medium text-red-700">{t.common.overdue}</span>}
                   </td>
                   <td>{delivery.label}</td>
                   <td>
@@ -51,15 +54,15 @@ export default async function ProjectGrnsPage({ params }: { params: Promise<{ id
                       {delivery.poNumber}
                     </Link>
                   </td>
-                  <td className="num text-right">
+                  <td className="num text-end">
                     <Money minor={delivery.valueMinor} currency={project.currency} />
                   </td>
-                  <td className="text-right">
+                  <td className="text-end">
                     <Link
                       href={`/vendor-pos/${delivery.vendorPoId}/grns/new?planItemId=${delivery.planItemId}`}
                       className="btn-secondary btn-sm"
                     >
-                      Receive
+                      {t.dashboard.receive}
                     </Link>
                   </td>
                 </tr>
@@ -71,22 +74,22 @@ export default async function ProjectGrnsPage({ params }: { params: Promise<{ id
 
       <section className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="card-title">Goods receipts</h2>
+          <h2 className="card-title">{t.projects.goodsReceipts}</h2>
         </div>
         {grns.length === 0 ? (
-          <EmptyState title="Nothing received yet" description="Receipts appear here as deliveries are posted." />
+          <EmptyState title={t.grn.nothingReceivedYet} description={t.grn.nothingReceivedHint} />
         ) : (
           <div className="overflow-x-auto">
             <table className="table table-hover">
               <thead>
                 <tr>
-                  <th>GRN</th>
-                  <th>Received</th>
-                  <th>Vendor / PO</th>
-                  <th>Against plan</th>
-                  <th className="num text-right">Accepted</th>
-                  <th className="num text-right">Value</th>
-                  <th>Status</th>
+                  <th>{t.grn.grnNumber}</th>
+                  <th>{t.grn.receivedQty}</th>
+                  <th>{t.dashboard.vendorPo}</th>
+                  <th>{t.grn.againstPlan}</th>
+                  <th className="num text-end">{t.grn.accepted}</th>
+                  <th className="num text-end">{t.common.value}</th>
+                  <th>{t.common.status}</th>
                 </tr>
               </thead>
               <tbody>
@@ -116,19 +119,19 @@ export default async function ProjectGrnsPage({ params }: { params: Promise<{ id
                       <td className="text-sm text-slate-600">
                         {grn.deliveryPlanItem ? (
                           <>
-                            {grn.deliveryPlanItem.label ?? `Delivery ${grn.deliveryPlanItem.seq}`}
+                            {grn.deliveryPlanItem.label ?? `${t.dashboard.delivery} ${grn.deliveryPlanItem.seq}`}
                             {slip !== null && (
-                              <span className={`ml-2 text-xs ${slip > 0 ? "text-red-700" : "text-emerald-700"}`}>
-                                {slip > 0 ? `${slip}d late` : slip < 0 ? `${Math.abs(slip)}d early` : "on time"}
+                              <span className={`ms-2 text-xs ${slip > 0 ? "text-red-700" : "text-emerald-700"}`}>
+                                {slip > 0 ? fill(t.grn.late, { days: slip }) : slip < 0 ? fill(t.grn.early, { days: Math.abs(slip) }) : t.grn.onTime}
                               </span>
                             )}
                           </>
                         ) : (
-                          <span className="text-slate-400">unplanned</span>
+                          <span className="text-slate-400">{t.vendorPo.unplanned}</span>
                         )}
                       </td>
-                      <td className="num text-right tabular">{formatQty(accepted)}</td>
-                      <td className="num text-right font-medium">
+                      <td className="num text-end tabular">{formatQty(accepted)}</td>
+                      <td className="num text-end font-medium">
                         <Money minor={value} currency={project.currency} />
                       </td>
                       <td>

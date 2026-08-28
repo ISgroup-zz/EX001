@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import type { FormState } from "@/server/actions/helpers";
+import { useT } from "./LocaleProvider";
 
 /** Submit button that disables and relabels itself while the action is in flight. */
 export function SubmitButton({
@@ -21,9 +22,10 @@ export function SubmitButton({
   disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
+  const t = useT();
   return (
     <button type="submit" name={name} value={value} className={className} disabled={pending || disabled}>
-      {pending ? pendingLabel ?? "Saving…" : children}
+      {pending ? pendingLabel ?? t.common.saving : children}
     </button>
   );
 }

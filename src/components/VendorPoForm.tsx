@@ -7,6 +7,7 @@ import { createVendorPoAction } from "@/server/actions/vendorPos";
 import { formatMoney, formatQty, parseMoneyToMinor, parseQty, roundQty, splitQuantityEvenly } from "@/lib/money";
 import { addMonths, addWeeks, toDateInput } from "@/lib/dates";
 import type { OrderableAgreementLine } from "@/server/services/vendorPo";
+import { useT } from "./LocaleProvider";
 
 /**
  * Raising a vendor PO, in three steps that mirror how a PM actually works:
@@ -72,6 +73,7 @@ export function VendorPoForm({
   const [planRows, setPlanRows] = useState<PlanRow[]>([]);
   const [expectedDate, setExpectedDate] = useState(toDateInput(addWeeks(new Date(), 4)));
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const t = useT();
 
   const outstanding = orderable.filter((line) => line.outstandingQty > 0);
 
@@ -215,7 +217,7 @@ export function VendorPoForm({
     quantities: row.quantities,
   }));
 
-  const steps = ["Vendor & dates", "What we're ordering", "Delivery plan"];
+  const steps = [t.vendorPo.stepVendor, t.vendorPo.stepLines, t.vendorPo.stepPlan];
 
   return (
     <form action={formAction} className="space-y-6">
@@ -257,10 +259,10 @@ export function VendorPoForm({
       {/* ---------------------------------------------------------------- step 1 */}
       <section className={step === 1 ? "space-y-5" : "hidden"}>
         <div className="card grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Vendor" htmlFor="vendorId">
+          <Field label={t.common.vendor} htmlFor="vendorId">
             <select id="vendorId" name="vendorId" required className="select" defaultValue="">
               <option value="" disabled>
-                Choose a vendor…
+                {t.vendorPo.chooseVendor}
               </option>
               {vendors.map((vendor) => (
                 <option key={vendor.id} value={vendor.id}>
@@ -270,9 +272,9 @@ export function VendorPoForm({
             </select>
           </Field>
 
-          <Field label="Against client document" htmlFor="clientAgreementId">
+          <Field label={t.vendorPo.againstClientDocument} htmlFor="clientAgreementId">
             <select id="clientAgreementId" name="clientAgreementId" className="select" defaultValue="">
-              <option value="">Not specified</option>
+              <option value="">{t.vendorPo.notSpecified}</option>
               {agreements.map((agreement) => (
                 <option key={agreement.id} value={agreement.id}>
                   {agreement.reference} · {agreement.type.toLowerCase()}
@@ -281,15 +283,15 @@ export function VendorPoForm({
             </select>
           </Field>
 
-          <Field label="Our PO number" htmlFor="poNumber" hint="Blank generates one.">
+          <Field label={t.vendorPo.ourPoNumber} htmlFor="poNumber" hint={t.vendorPo.poNumberHint}>
             <input id="poNumber" name="poNumber" className="input tabular" placeholder="PO-2026-0001" />
           </Field>
 
-          <Field label="Issue date" htmlFor="issueDate">
+          <Field label={t.projects.issueDate} htmlFor="issueDate">
             <input id="issueDate" name="issueDate" type="date" required defaultValue={today} className="input" />
           </Field>
 
-          <Field label="Expected delivery" htmlFor="expectedDeliveryDate" hint="Seeds the delivery plan.">
+          <Field label={t.vendorPo.expectedDelivery} htmlFor="expectedDeliveryDate" hint={t.vendorPo.expectedHint}>
             <input
               id="expectedDeliveryDate"
               name="expectedDeliveryDate"
@@ -300,14 +302,14 @@ export function VendorPoForm({
             />
           </Field>
 
-          <Field label="Notes" htmlFor="notes" className="sm:col-span-2 lg:col-span-3">
-            <input id="notes" name="notes" className="input" placeholder="Incoterms, shipping, anything worth recording" />
+          <Field label={t.common.notes} htmlFor="notes" className="sm:col-span-2 lg:col-span-3">
+            <input id="notes" name="notes" className="input" placeholder={t.vendorPo.notesPlaceholder} />
           </Field>
         </div>
 
         <div className="flex justify-end">
           <button type="button" className="btn-primary" onClick={() => setStep(2)}>
-            Continue
+            {t.common.continue}
           </button>
         </div>
       </section>
@@ -318,14 +320,13 @@ export function VendorPoForm({
           <div className="card overflow-hidden">
             <div className="card-header">
               <div>
-                <h2 className="card-title">Pull from the client&apos;s documents</h2>
+                <h2 className="card-title">{t.vendorPo.pullTitle}</h2>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Tick what this PO covers. Quantities and the link back to the client line come with it, which is what
-                  makes the invoice fill itself in later.
+                  {t.vendorPo.pullHint}
                 </p>
               </div>
               <button type="button" className="btn-secondary btn-sm" onClick={pullSelectedLines}>
-                Add selected
+                {t.vendorPo.addSelected}
               </button>
             </div>
             <div className="max-h-72 overflow-y-auto">
@@ -333,11 +334,11 @@ export function VendorPoForm({
                 <thead>
                   <tr>
                     <th className="w-10" />
-                    <th>Client line</th>
-                    <th>Document</th>
-                    <th className="num text-right">Client qty</th>
-                    <th className="num text-right">Already ordered</th>
-                    <th className="num text-right">Still to order</th>
+                    <th>{t.vendorPo.clientLine}</th>
+                    <th>{t.vendorPo.document}</th>
+                    <th className="num text-end">{t.vendorPo.clientQty}</th>
+                    <th className="num text-end">{t.vendorPo.alreadyOrdered}</th>
+                    <th className="num text-end">{t.vendorPo.stillToOrder}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -358,9 +359,9 @@ export function VendorPoForm({
                       </td>
                       <td className="text-slate-900">{line.description}</td>
                       <td className="text-xs text-slate-500 tabular">{line.agreementReference}</td>
-                      <td className="num text-right tabular">{formatQty(line.clientQty)}</td>
-                      <td className="num text-right tabular">{formatQty(line.orderedQty)}</td>
-                      <td className="num text-right font-medium tabular">
+                      <td className="num text-end tabular">{formatQty(line.clientQty)}</td>
+                      <td className="num text-end tabular">{formatQty(line.orderedQty)}</td>
+                      <td className="num text-end font-medium tabular">
                         {formatQty(line.outstandingQty)} {line.uom}
                       </td>
                     </tr>
@@ -373,22 +374,22 @@ export function VendorPoForm({
 
         <div className="card overflow-hidden">
           <div className="card-header">
-            <h2 className="card-title">Order lines</h2>
+            <h2 className="card-title">{t.vendorPo.orderLines}</h2>
             <button type="button" className="btn-secondary btn-sm" onClick={() => setLines((c) => [...c, blankLine()])}>
-              + Add line
+              + {t.vendorPo.addLine}
             </button>
           </div>
 
           {lines.length === 0 ? (
             <div className="empty-state">
-              <p className="text-sm font-medium text-slate-700">No lines yet</p>
+              <p className="text-sm font-medium text-slate-700">{t.vendorPo.noLinesYet}</p>
               <p className="text-sm text-slate-500">
                 {outstanding.length > 0
-                  ? "Tick what you need above and press Add selected, or add a line manually."
-                  : "Add a line to get started."}
+                  ? t.vendorPo.noLinesHintPull
+                  : t.vendorPo.noLinesHint}
               </p>
               <button type="button" className="btn-secondary btn-sm mt-2" onClick={() => setLines([blankLine()])}>
-                + Add line
+                + {t.vendorPo.addLine}
               </button>
             </div>
           ) : (
@@ -397,19 +398,19 @@ export function VendorPoForm({
                 <thead>
                   <tr>
                     <th className="w-10">#</th>
-                    <th>Description</th>
-                    <th style={{ width: "80px" }}>UoM</th>
-                    <th className="num text-right" style={{ width: "110px" }}>
-                      Qty
+                    <th>{t.common.description}</th>
+                    <th style={{ width: "80px" }}>{t.common.uom}</th>
+                    <th className="num text-end" style={{ width: "110px" }}>
+                      {t.common.quantity}
                     </th>
-                    <th className="num text-right" style={{ width: "140px" }}>
-                      Unit cost
+                    <th className="num text-end" style={{ width: "140px" }}>
+                      {t.vendorPo.unitCost}
                     </th>
-                    <th className="num text-right" style={{ width: "90px" }}>
-                      Tax %
+                    <th className="num text-end" style={{ width: "90px" }}>
+                      {t.common.tax} %
                     </th>
-                    <th className="num text-right" style={{ width: "130px" }}>
-                      Line total
+                    <th className="num text-end" style={{ width: "130px" }}>
+                      {t.common.lineTotal}
                     </th>
                     <th className="w-10" />
                   </tr>
@@ -422,11 +423,11 @@ export function VendorPoForm({
                         <input
                           className="grid-input"
                           value={line.description}
-                          placeholder="What we're buying"
+                          placeholder={t.vendorPo.whatWeBuying}
                           onChange={(event) => setLine(line.key, { description: event.target.value })}
                         />
                         {line.clientAgreementLineId && (
-                          <span className="ml-2 text-[11px] text-emerald-700">linked to client line</span>
+                          <span className="ms-2 text-[11px] text-emerald-700">{t.vendorPo.linkedToClientLine}</span>
                         )}
                       </td>
                       <td>
@@ -438,7 +439,7 @@ export function VendorPoForm({
                       </td>
                       <td>
                         <input
-                          className="grid-input text-right tabular"
+                          className="grid-input text-end tabular"
                           inputMode="decimal"
                           value={line.quantity}
                           onChange={(event) => setLine(line.key, { quantity: event.target.value })}
@@ -446,7 +447,7 @@ export function VendorPoForm({
                       </td>
                       <td>
                         <input
-                          className="grid-input text-right tabular"
+                          className="grid-input text-end tabular"
                           inputMode="decimal"
                           value={line.unitCost}
                           placeholder="0.00"
@@ -455,13 +456,13 @@ export function VendorPoForm({
                       </td>
                       <td>
                         <input
-                          className="grid-input text-right tabular"
+                          className="grid-input text-end tabular"
                           inputMode="decimal"
                           value={line.taxRatePct}
                           onChange={(event) => setLine(line.key, { taxRatePct: event.target.value })}
                         />
                       </td>
-                      <td className="num text-right text-slate-600 tabular">
+                      <td className="num text-end text-slate-600 tabular">
                         {formatMoney(Math.round(parseQty(line.quantity) * parseMoneyToMinor(line.unitCost)), currency)}
                       </td>
                       <td className="text-center">
@@ -469,7 +470,7 @@ export function VendorPoForm({
                           type="button"
                           onClick={() => removeLine(line.key)}
                           className="rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                          aria-label="Remove line"
+                          aria-label={t.common.remove}
                         >
                           ×
                         </button>
@@ -479,20 +480,20 @@ export function VendorPoForm({
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50 text-sm">
-                    <td colSpan={6} className="px-4 py-2 text-right font-medium text-slate-600">
-                      Net
+                    <td colSpan={6} className="px-4 py-2 text-end font-medium text-slate-600">
+                      {t.common.net}
                     </td>
-                    <td className="px-4 py-2 text-right font-semibold text-slate-900 tabular">
+                    <td className="px-4 py-2 text-end font-semibold text-slate-900 tabular">
                       {formatMoney(totals.net, currency)}
                     </td>
                     <td />
                   </tr>
                   {totals.tax > 0 && (
                     <tr className="bg-slate-50 text-sm">
-                      <td colSpan={6} className="px-4 py-2 text-right font-medium text-slate-600">
-                        Gross
+                      <td colSpan={6} className="px-4 py-2 text-end font-medium text-slate-600">
+                        {t.common.gross}
                       </td>
-                      <td className="px-4 py-2 text-right font-semibold text-slate-900 tabular">
+                      <td className="px-4 py-2 text-end font-semibold text-slate-900 tabular">
                         {formatMoney(totals.gross, currency)}
                       </td>
                       <td />
@@ -506,39 +507,38 @@ export function VendorPoForm({
 
         <div className="flex justify-between">
           <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
-            Back
+            {t.common.back}
           </button>
           <button type="button" className="btn-primary" onClick={goToPlan} disabled={activeLines.length === 0}>
-            Continue to delivery plan
+            {t.vendorPo.continueToPlan}
           </button>
         </div>
       </section>
 
       {/* ---------------------------------------------------------------- step 3 */}
       <section className={step === 3 ? "space-y-5" : "hidden"}>
-        <Alert tone="info" title="The delivery plan is the forecast">
-          Record what the vendor has promised and when. Each tranche becomes a planned goods receipt you can post with
-          one click when it arrives.
+        <Alert tone="info" title={t.vendorPo.planIsForecast}>
+          {t.vendorPo.planIsForecastHint}
         </Alert>
 
         <div className="card overflow-hidden">
           <div className="card-header">
-            <h2 className="card-title">Planned deliveries</h2>
+            <h2 className="card-title">{t.vendorPo.plannedDeliveries}</h2>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-secondary btn-sm" onClick={() => setPlanRows(singleTranche())}>
-                Single delivery
+                {t.vendorPo.singleDelivery}
               </button>
               <button type="button" className="btn-secondary btn-sm" onClick={() => splitInto(2, "months")}>
-                Split in 2
+                {t.vendorPo.splitIn2}
               </button>
               <button type="button" className="btn-secondary btn-sm" onClick={() => splitInto(3, "months")}>
-                Split in 3
+                {t.vendorPo.splitIn3}
               </button>
               <button type="button" className="btn-secondary btn-sm" onClick={() => splitInto(4, "months")}>
-                Monthly × 4
+                {t.vendorPo.monthlyBy4}
               </button>
               <button type="button" className="btn-secondary btn-sm" onClick={addPlanRow}>
-                + Tranche
+                {t.vendorPo.addTranche}
               </button>
             </div>
           </div>
@@ -547,13 +547,13 @@ export function VendorPoForm({
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: "180px" }}>Label</th>
-                  <th style={{ width: "160px" }}>Planned date</th>
+                  <th style={{ width: "180px" }}>{t.vendorPo.label}</th>
+                  <th style={{ width: "160px" }}>{t.vendorPo.plannedDate}</th>
                   {activeLines.map((line) => (
-                    <th key={line.key} className="num text-right">
+                    <th key={line.key} className="num text-end">
                       <span className="block max-w-[140px] truncate">{line.description}</span>
                       <span className="text-[10px] font-normal normal-case text-slate-400">
-                        {formatQty(parseQty(line.quantity))} {line.uom} ordered
+                        {formatQty(parseQty(line.quantity))} {line.uom} {t.vendorPo.ordered}
                       </span>
                     </th>
                   ))}
@@ -591,7 +591,7 @@ export function VendorPoForm({
                     {activeLines.map((line, index) => (
                       <td key={line.key}>
                         <input
-                          className="grid-input text-right tabular"
+                          className="grid-input text-end tabular"
                           inputMode="decimal"
                           value={row.quantities[index] ?? "0"}
                           onChange={(event) => setPlanCell(row.key, index, event.target.value)}
@@ -603,7 +603,7 @@ export function VendorPoForm({
                         type="button"
                         onClick={() => setPlanRows((current) => current.filter((item) => item.key !== row.key))}
                         className="rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                        aria-label="Remove tranche"
+                        aria-label={t.common.remove}
                       >
                         ×
                       </button>
@@ -616,10 +616,10 @@ export function VendorPoForm({
 
           <div className="border-t border-slate-200 bg-slate-50 px-5 py-4">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Coverage</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t.vendorPo.coverage}</h3>
               {hasUnderPlan && (
                 <button type="button" className="btn-secondary btn-sm" onClick={planRemainder}>
-                  Plan the remainder
+                  {t.vendorPo.planRemainder}
                 </button>
               )}
             </div>
@@ -637,7 +637,7 @@ export function VendorPoForm({
                         showPct={false}
                       />
                     </div>
-                    <span className={`w-32 shrink-0 text-right text-xs tabular ${entry.over ? "text-red-700" : "text-slate-500"}`}>
+                    <span className={`w-32 shrink-0 text-end text-xs tabular ${entry.over ? "text-red-700" : "text-slate-500"}`}>
                       {formatQty(entry.planned)} / {formatQty(entry.ordered)} {line.uom}
                     </span>
                   </li>
@@ -648,21 +648,21 @@ export function VendorPoForm({
         </div>
 
         {hasOverPlan && (
-          <Alert tone="danger" title="More planned than ordered">
-            One or more lines have a planned quantity above the ordered quantity. Reduce a tranche before saving.
+          <Alert tone="danger" title={t.vendorPo.overPlanned}>
+            {t.vendorPo.overPlannedHint}
           </Alert>
         )}
         {hasUnderPlan && !hasOverPlan && (
-          <Alert tone="warning" title="Part of this order is unplanned">
-            You can still save — the unplanned quantity simply won&apos;t appear in the forecast until you plan it.
+          <Alert tone="warning" title={t.vendorPo.underPlanned}>
+            {t.vendorPo.underPlannedHint}
           </Alert>
         )}
 
         <div className="flex justify-between">
           <button type="button" className="btn-secondary" onClick={() => setStep(2)}>
-            Back
+            {t.common.back}
           </button>
-          <SubmitButton pendingLabel="Creating…">Create purchase order</SubmitButton>
+          <SubmitButton pendingLabel={t.vendorPo.creating}>{t.vendorPo.createPo}</SubmitButton>
         </div>
       </section>
     </form>

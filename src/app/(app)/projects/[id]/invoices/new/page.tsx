@@ -6,8 +6,8 @@ import { getProject } from "@/server/services/project";
 import { getBillableLines } from "@/server/services/invoice";
 import { prisma } from "@/server/db";
 import { addDays, toDateInput } from "@/lib/dates";
-
-export const metadata = { title: "New invoice · Procurement Hub" };
+import { getT } from "@/server/locale";
+import { fill } from "@/lib/i18n";
 
 export default async function NewInvoicePage({
   params,
@@ -17,6 +17,7 @@ export default async function NewInvoicePage({
   searchParams: Promise<{ agreementId?: string }>;
 }) {
   const [{ id }, { agreementId }] = await Promise.all([params, searchParams]);
+  const t = await getT();
   const project = await getProject(id);
   if (!project) notFound();
 
@@ -29,10 +30,10 @@ export default async function NewInvoicePage({
 
   if (agreements.length === 0) {
     return (
-      <Alert tone="warning" title="Nothing to invoice against">
-        This project has no purchase order, contract or variation to bill against.{" "}
+      <Alert tone="warning" title={t.invoices.nothingToInvoice}>
+        {t.invoices.nothingToInvoiceHint}{" "}
         <Link href={`/projects/${id}/agreements/new`} className="link">
-          Record a client document
+          {t.invoices.recordClientDocument}
         </Link>
       </Alert>
     );
@@ -44,9 +45,9 @@ export default async function NewInvoicePage({
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-5">
-        <h2 className="text-lg font-semibold text-slate-900">New invoice</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{t.invoices.newInvoice}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Billing {project.client.name} for goods that have actually been received.
+          {fill(t.invoices.newSubtitle, { client: project.client.name })}
         </p>
       </div>
 

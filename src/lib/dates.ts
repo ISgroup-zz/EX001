@@ -101,11 +101,22 @@ export function fromDateInput(value: string | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-/** "in 4 days" / "3 days ago" — used on delivery queues where lateness is the point. */
-export function relativeDays(date: Date, reference: Date = today()): string {
+/**
+ * "in 4 days" / "3 days ago" — used on delivery queues where lateness is the point.
+ *
+ * Takes the dictionary rather than returning English: an untranslated phrase like
+ * "5 days ago" is not merely untranslated in an RTL page, it is visually reordered
+ * into "days ago 5".
+ */
+export function relativeDays(
+  date: Date,
+  t: { relative: { today: string; tomorrow: string; yesterday: string; inDays: string; daysAgo: string } },
+  reference: Date = today(),
+): string {
   const diff = daysBetween(reference, date);
-  if (diff === 0) return "today";
-  if (diff === 1) return "tomorrow";
-  if (diff === -1) return "yesterday";
-  return diff > 0 ? `in ${diff} days` : `${Math.abs(diff)} days ago`;
+  if (diff === 0) return t.relative.today;
+  if (diff === 1) return t.relative.tomorrow;
+  if (diff === -1) return t.relative.yesterday;
+  const template = diff > 0 ? t.relative.inDays : t.relative.daysAgo;
+  return template.replace("{days}", String(Math.abs(diff)));
 }

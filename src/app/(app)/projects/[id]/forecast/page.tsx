@@ -4,6 +4,7 @@ import { EmptyState, KpiCard } from "@/components/ui";
 import { getProject } from "@/server/services/project";
 import { defaultRange, getBillingForecast, getDeliveryForecast, getScheduleHealth } from "@/server/services/forecast";
 import { formatMoneyCompact, formatPercent, sumMinor } from "@/lib/money";
+import { getT } from "@/server/locale";
 
 export default async function ProjectForecastPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,13 +19,14 @@ export default async function ProjectForecastPage({ params }: { params: Promise<
   ]);
 
   const hasPlan = delivery.some((bucket) => bucket.plannedMinor > 0 || bucket.actualMinor > 0);
+  const t = await getT();
 
   if (!hasPlan) {
     return (
       <div className="card">
         <EmptyState
-          title="Nothing to forecast yet"
-          description="The forecast is built from delivery plans. Raise a vendor PO with its promised delivery dates and it will appear here."
+          title={t.forecast.nothingToForecast}
+          description={t.forecast.nothingToForecastHint}
         />
       </div>
     );
@@ -34,28 +36,28 @@ export default async function ProjectForecastPage({ params }: { params: Promise<
     <div className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Planned deliveries"
+          label={t.forecast.plannedDeliveries}
           value={formatMoneyCompact(sumMinor(delivery.map((b) => b.plannedMinor)), project.currency)}
-          hint="At vendor cost"
+          hint={t.forecast.atVendorCost}
         />
         <KpiCard
-          label="Billable value ahead"
+          label={t.forecast.billableAhead}
           value={formatMoneyCompact(sumMinor(billing.map((b) => b.plannedMinor)), project.currency)}
-          hint="Client value of those deliveries"
+          hint={t.forecast.clientValueOf}
         />
         <KpiCard
-          label="Overdue"
+          label={t.deliveries.overdue}
           value={health.overdueCount}
           hint={formatMoneyCompact(health.overdueValueMinor, project.currency)}
           tone={health.overdueCount > 0 ? "negative" : "positive"}
         />
         <KpiCard
-          label="On-time record"
-          value={health.onTimePct === null ? "—" : formatPercent(health.onTimePct, 0)}
+          label={t.deliveries.onTimeRecord}
+          value={health.onTimePct === null ? t.common.none : formatPercent(health.onTimePct, 0)}
           hint={
             health.averageSlipDays === null
-              ? "No receipts measured yet"
-              : `Average slip ${health.averageSlipDays.toFixed(1)} days`
+              ? t.deliveries.noReceiptsMeasured
+              : `${t.forecast.averageSlip} ${health.averageSlipDays.toFixed(1)} ${t.dashboard.days}`
           }
         />
       </section>
@@ -63,8 +65,8 @@ export default async function ProjectForecastPage({ params }: { params: Promise<
       <section className="card">
         <div className="card-header">
           <div>
-            <h2 className="card-title">Deliveries — planned vs. received</h2>
-            <p className="mt-0.5 text-xs text-slate-500">From the delivery plans on this project&apos;s vendor POs.</p>
+            <h2 className="card-title">{t.forecast.projectDeliveries}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t.forecast.projectDeliveriesHint}</p>
           </div>
         </div>
         <div className="p-5">
@@ -75,8 +77,8 @@ export default async function ProjectForecastPage({ params }: { params: Promise<
       <section className="card">
         <div className="card-header">
           <div>
-            <h2 className="card-title">Billing — expected vs. invoiced</h2>
-            <p className="mt-0.5 text-xs text-slate-500">What those deliveries are worth to the client, and what has been billed.</p>
+            <h2 className="card-title">{t.forecast.projectBilling}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t.forecast.projectBillingHint}</p>
           </div>
         </div>
         <div className="p-5">

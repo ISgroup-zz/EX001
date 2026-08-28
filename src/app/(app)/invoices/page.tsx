@@ -4,8 +4,7 @@ import { prisma } from "@/server/db";
 import { getPortfolioSummary } from "@/server/services/reporting";
 import { formatDate, isPast } from "@/lib/dates";
 import { formatMoneyCompact, sumMinor } from "@/lib/money";
-
-export const metadata = { title: "Invoices · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const { status } = await searchParams;
@@ -29,33 +28,34 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
     ...invoice,
     balanceMinor: invoice.totalMinor - sumMinor(invoice.payments.map((payment) => payment.amountMinor)),
   }));
+  const t = await getT();
 
   return (
     <>
-      <PageHeader title="Invoices" subtitle="Every invoice raised to clients across all projects." />
+      <PageHeader title={t.invoices.title} subtitle={t.invoices.subtitle} />
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Invoiced (net)" value={formatMoneyCompact(portfolio.invoicedNetMinor)} />
-        <KpiCard label="Collected" value={formatMoneyCompact(portfolio.paidMinor)} tone="positive" />
+        <KpiCard label={t.invoices.invoicedNet} value={formatMoneyCompact(portfolio.invoicedNetMinor)} />
+        <KpiCard label={t.invoices.collected} value={formatMoneyCompact(portfolio.paidMinor)} tone="positive" />
         <KpiCard
-          label="Awaiting payment"
+          label={t.invoices.awaitingPayment}
           value={formatMoneyCompact(portfolio.outstandingReceivableMinor)}
           tone={portfolio.outstandingReceivableMinor > 0 ? "warning" : "default"}
         />
         <KpiCard
-          label="Delivered, not billed"
+          label={t.dashboard.deliveredNotBilled}
           value={formatMoneyCompact(portfolio.unbilledDeliveredMinor)}
-          hint="Ready to invoice"
+          hint={t.dashboard.readyToInvoice}
         />
       </section>
 
       <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1">
         {[
-          { value: "", label: "All" },
-          { value: "DRAFT", label: "Drafts" },
-          { value: "ISSUED", label: "Issued" },
-          { value: "PARTIALLY_PAID", label: "Part paid" },
-          { value: "PAID", label: "Paid" },
+          { value: "", label: t.common.all },
+          { value: "DRAFT", label: t.invoices.drafts },
+          { value: "ISSUED", label: t.invoices.issuedFilter },
+          { value: "PARTIALLY_PAID", label: t.invoices.partPaid },
+          { value: "PAID", label: t.invoices.paidFilter },
         ].map((option) => (
           <Link
             key={option.value}
@@ -73,20 +73,20 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
 
       <section className="card overflow-hidden">
         {rows.length === 0 ? (
-          <EmptyState title="No invoices" description="Invoices appear here once goods have been received and billed." />
+          <EmptyState title={t.invoices.noInvoices} description={t.invoices.noInvoicesListHint} />
         ) : (
           <div className="overflow-x-auto">
             <table className="table table-hover">
               <thead>
                 <tr>
-                  <th>Invoice</th>
-                  <th>Client</th>
-                  <th>Project</th>
-                  <th>Issued</th>
-                  <th>Due</th>
-                  <th className="num text-right">Total</th>
-                  <th className="num text-right">Balance</th>
-                  <th>Status</th>
+                  <th>{t.invoices.invoice}</th>
+                  <th>{t.common.client}</th>
+                  <th>{t.common.project}</th>
+                  <th>{t.common.issued}</th>
+                  <th>{t.common.due}</th>
+                  <th className="num text-end">{t.common.total}</th>
+                  <th className="num text-end">{t.invoices.balance}</th>
+                  <th>{t.common.status}</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,10 +111,10 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                       <td className={`tabular ${overdue ? "font-medium text-red-700" : ""}`}>
                         {formatDate(invoice.dueDate)}
                       </td>
-                      <td className="num text-right font-medium">
+                      <td className="num text-end font-medium">
                         <Money minor={invoice.totalMinor} currency={invoice.currency} />
                       </td>
-                      <td className="num text-right">
+                      <td className="num text-end">
                         <Money minor={invoice.balanceMinor} currency={invoice.currency} />
                       </td>
                       <td>

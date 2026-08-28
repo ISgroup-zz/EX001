@@ -7,6 +7,8 @@ import { saveGrnAction } from "@/server/actions/grns";
 import { formatQty, parseQty } from "@/lib/money";
 import { formatDate, toDateInput } from "@/lib/dates";
 import type { GrnDraft } from "@/server/services/grn";
+import { useT } from "./LocaleProvider";
+import { fill } from "@/lib/i18n";
 
 /**
  * Receiving goods.
@@ -18,6 +20,7 @@ import type { GrnDraft } from "@/server/services/grn";
 export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
   const [state, formAction] = useActionState(saveGrnAction, null);
   const [showRejections, setShowRejections] = useState(false);
+  const t = useT();
   const [rows, setRows] = useState(() =>
     draft.lines.map((line) => ({
       vendorPoLineId: line.vendorPoLineId,
@@ -56,14 +59,13 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
       <FormMessage state={state} />
 
       {draft.planItemLabel && (
-        <Alert tone="info" title={`Receiving against "${draft.planItemLabel}"`}>
-          Planned for {draft.plannedDate ? formatDate(draft.plannedDate) : "—"}. Quantities below are pre-filled from that
-          plan — change only what differs from what actually turned up.
+        <Alert tone="info" title={fill(t.grn.receivingAgainst, { label: draft.planItemLabel })}>
+          {fill(t.grn.receivingAgainstHint, { date: draft.plannedDate ? formatDate(draft.plannedDate) : t.common.none })}
         </Alert>
       )}
 
       <div className="card grid gap-4 p-5 sm:grid-cols-3">
-        <Field label="Received date" htmlFor="receivedDate">
+        <Field label={t.grn.receivedDate} htmlFor="receivedDate">
           <input
             id="receivedDate"
             name="receivedDate"
@@ -73,26 +75,26 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
             className="input"
           />
         </Field>
-        <Field label="Delivery note ref" htmlFor="deliveryNoteRef">
-          <input id="deliveryNoteRef" name="deliveryNoteRef" className="input" placeholder="Vendor's DN number" />
+        <Field label={t.grn.deliveryNoteRef} htmlFor="deliveryNoteRef">
+          <input id="deliveryNoteRef" name="deliveryNoteRef" className="input" placeholder={t.grn.deliveryNotePlaceholder} />
         </Field>
-        <Field label="Notes" htmlFor="notes">
-          <input id="notes" name="notes" className="input" placeholder="Condition, discrepancies, who checked it" />
+        <Field label={t.common.notes} htmlFor="notes">
+          <input id="notes" name="notes" className="input" placeholder={t.grn.notesPlaceholder} />
         </Field>
       </div>
 
       <div className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="card-title">Quantities received</h2>
+          <h2 className="card-title">{t.grn.quantitiesReceived}</h2>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-secondary btn-sm" onClick={receiveAll}>
-              Receive all outstanding
+              {t.grn.receiveAllOutstanding}
             </button>
             <button type="button" className="btn-ghost btn-sm" onClick={clearAll}>
-              Clear
+              {t.grn.clear}
             </button>
             <button type="button" className="btn-ghost btn-sm" onClick={() => setShowRejections((value) => !value)}>
-              {showRejections ? "Hide rejections" : "Record a rejection"}
+              {showRejections ? t.grn.hideRejections : t.grn.recordRejection}
             </button>
           </div>
         </div>
@@ -102,19 +104,19 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
             <thead>
               <tr>
                 <th className="w-10">#</th>
-                <th>Description</th>
-                <th className="num text-right">Ordered</th>
-                <th className="num text-right">Already received</th>
-                <th className="num text-right">Outstanding</th>
-                <th className="num text-right" style={{ width: "130px" }}>
-                  Accepted
+                <th>{t.common.description}</th>
+                <th className="num text-end">{t.grn.ordered}</th>
+                <th className="num text-end">{t.grn.alreadyReceived}</th>
+                <th className="num text-end">{t.grn.outstanding}</th>
+                <th className="num text-end" style={{ width: "130px" }}>
+                  {t.grn.accepted}
                 </th>
                 {showRejections && (
                   <>
-                    <th className="num text-right" style={{ width: "130px" }}>
-                      Rejected
+                    <th className="num text-end" style={{ width: "130px" }}>
+                      {t.grn.rejected}
                     </th>
-                    <th style={{ width: "200px" }}>Remarks</th>
+                    <th style={{ width: "200px" }}>{t.grn.remarks}</th>
                   </>
                 )}
               </tr>
@@ -128,26 +130,26 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
                   <tr key={line.vendorPoLineId}>
                     <td className="text-xs text-slate-400">{line.lineNo}</td>
                     <td className="text-slate-900">{line.description}</td>
-                    <td className="num text-right tabular">
+                    <td className="num text-end tabular">
                       {formatQty(line.orderedQty)} {line.uom}
                     </td>
-                    <td className="num text-right tabular text-slate-500">{formatQty(line.receivedQty)}</td>
-                    <td className="num text-right tabular font-medium">{formatQty(line.outstandingQty)}</td>
+                    <td className="num text-end tabular text-slate-500">{formatQty(line.receivedQty)}</td>
+                    <td className="num text-end tabular font-medium">{formatQty(line.outstandingQty)}</td>
                     <td>
                       <input
-                        className={`grid-input text-right tabular ${over ? "border-red-400 bg-red-50" : ""}`}
+                        className={`grid-input text-end tabular ${over ? "border-red-400 bg-red-50" : ""}`}
                         inputMode="decimal"
                         value={row.quantityAccepted}
                         placeholder="0"
                         onChange={(event) => setRow(line.vendorPoLineId, { quantityAccepted: event.target.value })}
                       />
-                      {over && <p className="mt-0.5 text-right text-[11px] text-red-600">more than outstanding</p>}
+                      {over && <p className="mt-0.5 text-end text-[11px] text-red-600">{t.grn.moreThanOutstanding}</p>}
                     </td>
                     {showRejections && (
                       <>
                         <td>
                           <input
-                            className="grid-input text-right tabular"
+                            className="grid-input text-end tabular"
                             inputMode="decimal"
                             value={row.quantityRejected}
                             placeholder="0"
@@ -158,7 +160,7 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
                           <input
                             className="grid-input"
                             value={row.remarks}
-                            placeholder="Reason"
+                            placeholder={t.grn.reason}
                             onChange={(event) => setRow(line.vendorPoLineId, { remarks: event.target.value })}
                           />
                         </td>
@@ -173,9 +175,8 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
       </div>
 
       {overReceipt && (
-        <Alert tone="danger" title="More than was ordered">
-          One or more lines accept more than the outstanding quantity. A goods receipt can never take a line past its
-          ordered quantity.
+        <Alert tone="danger" title={t.grn.overReceipt}>
+          {t.grn.overReceiptHint}
         </Alert>
       )}
 
@@ -184,17 +185,17 @@ export function GrnForm({ draft, grnId }: { draft: GrnDraft; grnId?: string }) {
           name="intent"
           value="draft"
           className="btn-secondary"
-          pendingLabel="Saving…"
+          pendingLabel={t.common.saving}
           disabled={nothingEntered}
         >
-          Save as draft
+          {t.grn.saveDraft}
         </SubmitButton>
-        <SubmitButton name="intent" value="post" pendingLabel="Posting…" disabled={nothingEntered}>
-          Post receipt
+        <SubmitButton name="intent" value="post" pendingLabel={t.grn.posting} disabled={nothingEntered}>
+          {t.grn.postReceipt}
         </SubmitButton>
       </div>
-      <p className="text-right text-xs text-slate-500">
-        Posting makes these goods count as delivered — and billable to the client.
+      <p className="text-end text-xs text-slate-500">
+        {t.grn.postingNote}
       </p>
     </form>
   );

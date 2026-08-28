@@ -5,6 +5,7 @@ import { LineItemsEditor } from "./LineItemsEditor";
 import { FormMessage, SubmitButton } from "./Form";
 import { Field } from "./ui";
 import { openProjectAction } from "@/server/actions/projects";
+import { useT } from "./LocaleProvider";
 
 /**
  * Opening a project.
@@ -19,28 +20,20 @@ type Option = { id: string; name: string };
 const DOCUMENT_TYPES = [
   {
     value: "PO",
-    label: "Purchase order",
-    blurb: "The client sent a PO. Its line total becomes the opening budget.",
+    labelKey: "PO" as const,
+    blurbKey: "poBlurb" as const,
   },
   {
     value: "CONTRACT",
-    label: "Contract",
-    blurb: "A signed contract with a contract value, priced by line or as a lump sum.",
+    labelKey: "CONTRACT" as const,
+    blurbKey: "contractBlurb" as const,
   },
   {
     value: "FRAMEWORK",
-    label: "Framework agreement",
-    blurb: "An umbrella agreement with a ceiling. Call-off POs draw the ceiling down later.",
+    labelKey: "FRAMEWORK" as const,
+    blurbKey: "frameworkBlurb" as const,
   },
 ] as const;
-
-const LINE_COLUMNS = [
-  { key: "description", label: "Description", type: "text" as const, placeholder: "What the client ordered" },
-  { key: "uom", label: "UoM", type: "text" as const, width: "80px", placeholder: "EA" },
-  { key: "quantity", label: "Qty", type: "qty" as const, width: "100px" },
-  { key: "unitPrice", label: "Unit price", type: "money" as const, width: "130px" },
-  { key: "taxRatePct", label: "Tax %", type: "percent" as const, width: "90px" },
-];
 
 export function OpenProjectForm({
   clients,
@@ -55,9 +48,19 @@ export function OpenProjectForm({
   const [step, setStep] = useState(1);
   const [documentType, setDocumentType] = useState<string>("PO");
   const [currency, setCurrency] = useState("USD");
+  const t = useT();
+
+  // Built per render because the headers are translated.
+  const LINE_COLUMNS = [
+  { key: "description", label: t.common.description, type: "text" as const },
+  { key: "uom", label: t.common.uom, type: "text" as const, width: "80px", placeholder: "EA" },
+  { key: "quantity", label: t.common.quantity, type: "qty" as const, width: "100px" },
+  { key: "unitPrice", label: t.common.unitPrice, type: "money" as const, width: "130px" },
+  { key: "taxRatePct", label: `${t.common.tax} %`, type: "percent" as const, width: "90px" },
+  ];
 
   const isFramework = documentType === "FRAMEWORK";
-  const steps = ["Client & document", "Document details", "Project"];
+  const steps = [t.projects.clientAndDocument, t.projects.documentDetails, t.projects.projectStep];
 
   return (
     <form action={formAction} className="space-y-6">
@@ -97,10 +100,10 @@ export function OpenProjectForm({
       {/* ---------------------------------------------------------------- step 1 */}
       <section className={step === 1 ? "space-y-5" : "hidden"}>
         <div className="card p-5">
-          <Field label="Client" htmlFor="clientId">
+          <Field label={t.common.client} htmlFor="clientId">
             <select id="clientId" name="clientId" required className="select" defaultValue="">
               <option value="" disabled>
-                Choose the client…
+                {t.projects.chooseClient}
               </option>
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>
@@ -112,21 +115,21 @@ export function OpenProjectForm({
         </div>
 
         <div>
-          <p className="label">What did the client send?</p>
+          <p className="label">{t.projects.whatDidClientSend}</p>
           <div className="grid gap-3 sm:grid-cols-3">
             {DOCUMENT_TYPES.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setDocumentType(option.value)}
-                className={`rounded-xl border p-4 text-left transition ${
+                className={`rounded-xl border p-4 text-start transition ${
                   documentType === option.value
                     ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 }`}
               >
-                <span className="block text-sm font-semibold text-slate-900">{option.label}</span>
-                <span className="mt-1 block text-xs leading-relaxed text-slate-600">{option.blurb}</span>
+                <span className="block text-sm font-semibold text-slate-900">{t.documentTypes[option.labelKey]}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-slate-600">{t.projects[option.blurbKey]}</span>
               </button>
             ))}
           </div>
@@ -134,7 +137,7 @@ export function OpenProjectForm({
 
         <div className="flex justify-end">
           <button type="button" className="btn-primary" onClick={() => setStep(2)}>
-            Continue
+            {t.common.continue}
           </button>
         </div>
       </section>
@@ -143,13 +146,13 @@ export function OpenProjectForm({
       <section className={step === 2 ? "space-y-5" : "hidden"}>
         <div className="card space-y-5 p-5">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Client's document no." htmlFor="reference">
-              <input id="reference" name="reference" required className="input" placeholder="e.g. NW-PO-88431" />
+            <Field label={t.projects.clientDocNo} htmlFor="reference">
+              <input id="reference" name="reference" required className="input" placeholder={t.projects.docNoPlaceholder} />
             </Field>
-            <Field label="Title" htmlFor="title" className="sm:col-span-2">
-              <input id="title" name="title" className="input" placeholder="Short description of the scope" />
+            <Field label={t.common.title} htmlFor="title" className="sm:col-span-2">
+              <input id="title" name="title" className="input" placeholder={t.projects.titlePlaceholder} />
             </Field>
-            <Field label="Issue date" htmlFor="issueDate">
+            <Field label={t.projects.issueDate} htmlFor="issueDate">
               <input id="issueDate" name="issueDate" type="date" required defaultValue={today} className="input" />
             </Field>
           </div>
@@ -157,24 +160,24 @@ export function OpenProjectForm({
           {isFramework ? (
             <div className="grid gap-4 sm:grid-cols-3">
               <Field
-                label="Ceiling value"
+                label={t.projects.ceilingValue}
                 htmlFor="declaredValue"
-                hint="The maximum the framework covers. This is the opening budget; call-offs draw it down."
+                hint={t.projects.ceilingHint}
               >
                 <input id="declaredValue" name="declaredValue" required className="input tabular" placeholder="1500000" />
               </Field>
-              <Field label="Valid from" htmlFor="validFrom">
+              <Field label={t.projects.validFrom} htmlFor="validFrom">
                 <input id="validFrom" name="validFrom" type="date" className="input" />
               </Field>
-              <Field label="Valid to" htmlFor="validTo">
+              <Field label={t.projects.validTo} htmlFor="validTo">
                 <input id="validTo" name="validTo" type="date" className="input" />
               </Field>
             </div>
           ) : (
             <Field
-              label="Lump-sum value (optional)"
+              label={t.projects.lumpSum}
               htmlFor="declaredValue"
-              hint="Use this only when the document has a headline value and no line detail."
+              hint={t.projects.lumpSumHint}
             >
               <input id="declaredValue" name="declaredValue" className="input tabular sm:max-w-xs" placeholder="0.00" />
             </Field>
@@ -182,22 +185,22 @@ export function OpenProjectForm({
 
           {!isFramework && (
             <div>
-              <p className="label">Lines</p>
-              <LineItemsEditor name="lines" columns={LINE_COLUMNS} currency={currency} addLabel="Add line" />
+              <p className="label">{t.common.lines}</p>
+              <LineItemsEditor name="lines" columns={LINE_COLUMNS} currency={currency} addLabel={t.editor.addLine} />
             </div>
           )}
 
-          <Field label="Notes" htmlFor="notes">
-            <textarea id="notes" name="notes" className="textarea" placeholder="Anything worth recording about this document" />
+          <Field label={t.common.notes} htmlFor="notes">
+            <textarea id="notes" name="notes" className="textarea" placeholder={t.projects.notesPlaceholder} />
           </Field>
         </div>
 
         <div className="flex justify-between">
           <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
-            Back
+            {t.common.back}
           </button>
           <button type="button" className="btn-primary" onClick={() => setStep(3)}>
-            Continue
+            {t.common.continue}
           </button>
         </div>
       </section>
@@ -206,18 +209,18 @@ export function OpenProjectForm({
       <section className={step === 3 ? "space-y-5" : "hidden"}>
         <div className="card space-y-5 p-5">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Project name" htmlFor="name">
-              <input id="name" name="name" required className="input" placeholder="e.g. Substation 220kV Upgrade" />
+            <Field label={t.projects.projectName} htmlFor="name">
+              <input id="name" name="name" required className="input" placeholder={t.projects.projectNamePlaceholder} />
             </Field>
-            <Field label="Project code" htmlFor="code" hint="Leave blank to generate one automatically.">
+            <Field label={t.projects.projectCode} htmlFor="code" hint={t.projects.projectCodeHint}>
               <input id="code" name="code" className="input" placeholder="PRJ-2026-0001" />
             </Field>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Project manager" htmlFor="managerId">
+            <Field label={t.projects.projectManager} htmlFor="managerId">
               <select id="managerId" name="managerId" className="select" defaultValue="">
-                <option value="">Unassigned</option>
+                <option value="">{t.common.unassigned}</option>
                 {managers.map((manager) => (
                   <option key={manager.id} value={manager.id}>
                     {manager.name}
@@ -225,7 +228,7 @@ export function OpenProjectForm({
                 ))}
               </select>
             </Field>
-            <Field label="Currency" htmlFor="currency">
+            <Field label={t.projects.currency} htmlFor="currency">
               <select
                 id="currency"
                 name="currency"
@@ -240,24 +243,24 @@ export function OpenProjectForm({
                 ))}
               </select>
             </Field>
-            <Field label="Start date" htmlFor="startDate">
+            <Field label={t.projects.startDate} htmlFor="startDate">
               <input id="startDate" name="startDate" type="date" required defaultValue={today} className="input" />
             </Field>
-            <Field label="Target completion" htmlFor="targetDate">
+            <Field label={t.projects.targetCompletion} htmlFor="targetDate">
               <input id="targetDate" name="targetDate" type="date" className="input" />
             </Field>
           </div>
 
-          <Field label="Description" htmlFor="description">
-            <textarea id="description" name="description" className="textarea" placeholder="Scope summary" />
+          <Field label={t.projects.descriptionLabel} htmlFor="description">
+            <textarea id="description" name="description" className="textarea" placeholder={t.projects.scopeSummary} />
           </Field>
         </div>
 
         <div className="flex justify-between">
           <button type="button" className="btn-secondary" onClick={() => setStep(2)}>
-            Back
+            {t.common.back}
           </button>
-          <SubmitButton pendingLabel="Opening project…">Open project</SubmitButton>
+          <SubmitButton pendingLabel={t.projects.opening}>{t.projects.openProject}</SubmitButton>
         </div>
       </section>
     </form>

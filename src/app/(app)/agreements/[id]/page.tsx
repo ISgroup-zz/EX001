@@ -5,6 +5,8 @@ import { getAgreementDetail } from "@/server/services/agreement";
 import { getBillableLines } from "@/server/services/invoice";
 import { formatDate, isPast } from "@/lib/dates";
 import { formatMoney, formatPercent, formatQty, lineTotalMinor } from "@/lib/money";
+import { getT } from "@/server/locale";
+import { fill } from "@/lib/i18n";
 
 export default async function AgreementDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,15 +17,16 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
   const billable = agreement.type === "FRAMEWORK" ? [] : await getBillableLines(id);
   const billableByLine = new Map(billable.map((line) => [line.clientAgreementLineId, line]));
   const expired = agreement.validTo ? isPast(agreement.validTo) : false;
+  const t = await getT();
 
   return (
     <>
       <PageHeader
         title={agreement.reference}
         breadcrumb={[
-          { label: "Projects", href: "/projects" },
+          { label: t.projects.title, href: "/projects" },
           { label: agreement.project.code, href: `/projects/${agreement.project.id}` },
-          { label: "Client documents", href: `/projects/${agreement.project.id}/agreements` },
+          { label: t.agreements.clientDocuments, href: `/projects/${agreement.project.id}/agreements` },
           { label: agreement.reference },
         ]}
         subtitle={
@@ -35,12 +38,12 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
             )}
             {agreement.title && <span>{agreement.title}</span>}
             <span className="text-slate-300">·</span>
-            <span>issued {formatDate(agreement.issueDate)}</span>
+            <span>{t.common.issued} {formatDate(agreement.issueDate)}</span>
             {agreement.parentAgreement && (
               <>
                 <span className="text-slate-300">·</span>
                 <span className="inline-flex items-center gap-1.5">
-                  {agreement.type === "VARIATION" ? "amends" : "call-off on"}
+                  {agreement.type === "VARIATION" ? t.agreements.amends : t.agreements.calledOff}
                   <Link href={`/agreements/${agreement.parentAgreement.id}`} className="link tabular">
                     {agreement.parentAgreement.reference}
                   </Link>
@@ -52,7 +55,7 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
         actions={
           agreement.type !== "FRAMEWORK" ? (
             <Link href={`/projects/${agreement.project.id}/invoices/new?agreementId=${id}`} className="btn-primary">
-              Invoice against this
+              {t.agreements.invoiceAgainst}
             </Link>
           ) : null
         }
@@ -60,33 +63,32 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
 
       {expired && (
         <div className="mb-5">
-          <Alert tone="warning" title="This document has expired">
-            Its validity ended on {formatDate(agreement.validTo)}. Record an extension or a new document before billing
-            further against it.
+          <Alert tone="warning" title={t.agreements.expired}>
+            {fill(t.agreements.expiredHint, { date: formatDate(agreement.validTo) })}
           </Alert>
         </div>
       )}
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Document value" value={formatMoney(agreement.valueMinor, currency)} />
+        <KpiCard label={t.agreements.documentValue} value={formatMoney(agreement.valueMinor, currency)} />
         <KpiCard
-          label="Invoiced against it"
+          label={t.agreements.invoicedAgainstIt}
           value={formatMoney(agreement.invoicedMinor, currency)}
-          hint={formatPercent((agreement.invoicedMinor / (agreement.valueMinor || 1)) * 100, 0) + " of value"}
+          hint={`${formatPercent((agreement.invoicedMinor / (agreement.valueMinor || 1)) * 100, 0)} ${t.agreements.ofValue}`}
         />
         {agreement.frameworkUsage ? (
           <>
-            <KpiCard label="Called off" value={formatMoney(agreement.frameworkUsage.calledOffMinor, currency)} />
+            <KpiCard label={t.agreements.calledOff} value={formatMoney(agreement.frameworkUsage.calledOffMinor, currency)} />
             <KpiCard
-              label="Ceiling remaining"
+              label={t.agreements.ceilingRemaining}
               value={formatMoney(agreement.frameworkUsage.remainingMinor, currency)}
               tone={agreement.frameworkUsage.remainingMinor <= 0 ? "negative" : "default"}
             />
           </>
         ) : (
           <>
-            <KpiCard label="Lines" value={agreement.lines.length} />
-            <KpiCard label="Invoices" value={agreement.invoices.length} />
+            <KpiCard label={t.common.lines} value={agreement.lines.length} />
+            <KpiCard label={t.projects.invoices} value={agreement.invoices.length} />
           </>
         )}
       </section>
@@ -94,10 +96,12 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
       {agreement.frameworkUsage && (
         <section className="card mb-6 p-5">
           <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="card-title">Ceiling usage</h2>
+            <h2 className="card-title">{t.agreements.ceilingUsage}</h2>
             <span className="text-sm text-slate-600 tabular">
-              {formatMoney(agreement.frameworkUsage.calledOffMinor, currency)} of{" "}
-              {formatMoney(agreement.frameworkUsage.ceilingMinor, currency)}
+              {fill(t.dashboard.amountOfTotal, {
+                amount: formatMoney(agreement.frameworkUsage.calledOffMinor, currency),
+                total: formatMoney(agreement.frameworkUsage.ceilingMinor, currency),
+              })}
             </span>
           </div>
           <ProgressBar
@@ -106,9 +110,9 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
             tone={agreement.frameworkUsage.usedPct >= 90 ? "red" : agreement.frameworkUsage.usedPct >= 70 ? "amber" : "brand"}
           />
 
-          <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Call-offs</h3>
+          <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.agreements.callOffs}</h3>
           {agreement.frameworkUsage.callOffs.length === 0 ? (
-            <p className="text-sm text-slate-500">Nothing has been called off yet.</p>
+            <p className="text-sm text-slate-500">{t.agreements.nothingCalledOff}</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {agreement.frameworkUsage.callOffs.map((callOff) => (
@@ -130,9 +134,9 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
       {agreement.lines.length > 0 && (
         <section className="card mb-6 overflow-hidden">
           <div className="card-header">
-            <h2 className="card-title">Lines</h2>
+            <h2 className="card-title">{t.common.lines}</h2>
             <p className="text-xs text-slate-500">
-              Delivered and invoiced columns come from goods actually received against linked vendor POs.
+              {t.agreements.linesHint}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -140,13 +144,13 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
               <thead>
                 <tr>
                   <th className="w-10">#</th>
-                  <th>Description</th>
-                  <th className="num text-right">Qty</th>
-                  <th className="num text-right">Unit price</th>
-                  <th className="num text-right">Line total</th>
-                  <th className="num text-right">Delivered</th>
-                  <th className="num text-right">Invoiced</th>
-                  <th className="num text-right">Billable now</th>
+                  <th>{t.common.description}</th>
+                  <th className="num text-end">{t.common.quantity}</th>
+                  <th className="num text-end">{t.common.unitPrice}</th>
+                  <th className="num text-end">{t.common.lineTotal}</th>
+                  <th className="num text-end">{t.agreements.delivered}</th>
+                  <th className="num text-end">{t.agreements.invoicedCol}</th>
+                  <th className="num text-end">{t.agreements.billableNow}</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,18 +160,18 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
                     <tr key={line.id}>
                       <td className="text-xs text-slate-400">{line.lineNo}</td>
                       <td className="text-slate-900">{line.description}</td>
-                      <td className="num text-right tabular">
+                      <td className="num text-end tabular">
                         {formatQty(line.quantity)} {line.uom}
                       </td>
-                      <td className="num text-right">
+                      <td className="num text-end">
                         <Money minor={line.unitPriceMinor} currency={currency} />
                       </td>
-                      <td className="num text-right font-medium">
+                      <td className="num text-end font-medium">
                         <Money minor={lineTotalMinor(line.quantity, line.unitPriceMinor)} currency={currency} />
                       </td>
-                      <td className="num text-right tabular">{stats ? formatQty(stats.deliveredQty) : "—"}</td>
-                      <td className="num text-right tabular">{stats ? formatQty(stats.invoicedQty) : "—"}</td>
-                      <td className="num text-right tabular">
+                      <td className="num text-end tabular">{stats ? formatQty(stats.deliveredQty) : "—"}</td>
+                      <td className="num text-end tabular">{stats ? formatQty(stats.invoicedQty) : "—"}</td>
+                      <td className="num text-end tabular">
                         {stats ? (
                           <span className={stats.billableQty > 0 ? "font-semibold text-emerald-700" : "text-slate-400"}>
                             {formatQty(stats.billableQty)}
@@ -187,19 +191,19 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
 
       <section className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="card-title">Invoices raised against this document</h2>
+          <h2 className="card-title">{t.agreements.invoicesAgainst}</h2>
         </div>
         {agreement.invoices.length === 0 ? (
-          <EmptyState title="No invoices yet" />
+          <EmptyState title={t.agreements.noInvoices} />
         ) : (
           <table className="table table-hover">
             <thead>
               <tr>
-                <th>Invoice</th>
-                <th>Issued</th>
-                <th>Status</th>
-                <th className="num text-right">Net</th>
-                <th className="num text-right">Total</th>
+                <th>{t.invoices.invoice}</th>
+                <th>{t.common.issued}</th>
+                <th>{t.common.status}</th>
+                <th className="num text-end">{t.common.net}</th>
+                <th className="num text-end">{t.common.total}</th>
               </tr>
             </thead>
             <tbody>
@@ -214,10 +218,10 @@ export default async function AgreementDetailPage({ params }: { params: Promise<
                   <td>
                     <StatusBadge status={invoice.status} />
                   </td>
-                  <td className="num text-right">
+                  <td className="num text-end">
                     <Money minor={invoice.subtotalMinor} currency={currency} />
                   </td>
-                  <td className="num text-right font-medium">
+                  <td className="num text-end font-medium">
                     <Money minor={invoice.totalMinor} currency={currency} />
                   </td>
                 </tr>

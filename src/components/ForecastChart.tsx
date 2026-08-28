@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import { useT } from "./LocaleProvider";
 
 /**
  * Planned vs. actual, month by month — grouped columns, because the job is telling
@@ -16,8 +17,8 @@ import { formatMoney, formatMoneyCompact } from "@/lib/money";
 export type ChartBucket = { key: string; label: string; plannedMinor: number; actualMinor: number };
 
 const SERIES = [
-  { id: "planned", label: "Planned", color: "#2a78d6" },
-  { id: "actual", label: "Actual", color: "#eb6834" },
+  { id: "planned", color: "#2a78d6" },
+  { id: "actual", color: "#eb6834" },
 ] as const;
 
 const VB = { width: 840, height: 280 };
@@ -60,18 +61,20 @@ function niceScale(peak: number, targetTicks = 4): { top: number; ticks: number[
 export function ForecastChart({
   buckets,
   currency = "USD",
-  emptyMessage = "Nothing planned in this period.",
+  emptyMessage,
 }: {
   buckets: ChartBucket[];
   currency?: string;
   emptyMessage?: string;
 }) {
+  const t = useT();
+  const seriesLabel = (id: string) => (id === "planned" ? t.forecast.plannedSeries : t.forecast.actualSeries);
   const [hovered, setHovered] = useState<{ index: number; series: string } | null>(null);
 
   const peak = Math.max(0, ...buckets.flatMap((bucket) => [bucket.plannedMinor, bucket.actualMinor]));
   if (buckets.length === 0 || peak === 0) {
     return (
-      <div className="flex h-56 items-center justify-center text-sm text-slate-500">{emptyMessage}</div>
+      <div className="flex h-56 items-center justify-center text-sm text-slate-500">{emptyMessage ?? t.forecast.noneInPeriod}</div>
     );
   }
 
@@ -85,7 +88,7 @@ export function ForecastChart({
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${VB.width} ${VB.height}`} className="w-full" role="img" aria-label="Planned versus actual by month">
+      <svg viewBox={`0 0 ${VB.width} ${VB.height}`} className="w-full" role="img" aria-label={t.forecast.chartLabel}>
         {/* Gridlines: hairline, solid, one step off the surface. */}
         {ticks.map((tick) => (
           <g key={tick}>
@@ -128,7 +131,7 @@ export function ForecastChart({
                       fill="transparent"
                       tabIndex={0}
                       role="button"
-                      aria-label={`${bucket.label} ${series.label} ${formatMoney(value, currency)}`}
+                      aria-label={`${bucket.label} ${seriesLabel(series.id)} ${formatMoney(value, currency)}`}
                       onMouseEnter={() => setHovered({ index, series: series.id })}
                       onMouseLeave={() => setHovered(null)}
                       onFocus={() => setHovered({ index, series: series.id })}
@@ -167,7 +170,7 @@ export function ForecastChart({
               <p key={series.id} className="flex items-center gap-2 text-sm">
                 <span className="h-0.5 w-3 shrink-0 rounded-full" style={{ backgroundColor: series.color }} aria-hidden />
                 <span className="font-semibold text-slate-900 tabular">{formatMoney(value, currency)}</span>
-                <span className="text-xs text-slate-500">{series.label}</span>
+                <span className="text-xs text-slate-500">{seriesLabel(series.id)}</span>
               </p>
             );
           })}
@@ -178,7 +181,7 @@ export function ForecastChart({
         {SERIES.map((series) => (
           <span key={series.id} className="flex items-center gap-1.5 text-xs text-slate-600">
             <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: series.color }} aria-hidden />
-            {series.label}
+            {seriesLabel(series.id)}
           </span>
         ))}
       </div>

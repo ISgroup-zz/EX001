@@ -4,22 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import type { SessionUser } from "@/server/auth";
-
-const NAV = [
-  { href: "/", label: "Dashboard", exact: true },
-  { href: "/projects", label: "Projects" },
-  { href: "/deliveries", label: "Deliveries" },
-  { href: "/invoices", label: "Invoices" },
-  { href: "/forecast", label: "Forecast" },
-  { href: "/clients", label: "Clients" },
-  { href: "/vendors", label: "Vendors" },
-];
-
-const ROLE_LABEL: Record<string, string> = {
-  ADMIN: "Admin",
-  PROJECT_MANAGER: "Project manager",
-  VIEWER: "Viewer",
-};
+import { LanguageToggle } from "./LanguageToggle";
+import { useT } from "./LocaleProvider";
 
 export function AppShell({
   user,
@@ -31,6 +17,17 @@ export function AppShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const t = useT();
+
+  const nav = [
+    { href: "/", label: t.nav.dashboard, exact: true },
+    { href: "/projects", label: t.nav.projects },
+    { href: "/deliveries", label: t.nav.deliveries },
+    { href: "/invoices", label: t.nav.invoices },
+    { href: "/forecast", label: t.nav.forecast },
+    { href: "/clients", label: t.nav.clients },
+    { href: "/vendors", label: t.nav.vendors },
+  ];
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -43,11 +40,11 @@ export function AppShell({
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">
               P
             </span>
-            <span className="text-sm font-semibold tracking-tight text-slate-900">Procurement Hub</span>
+            <span className="text-sm font-semibold tracking-tight text-slate-900">{t.app.name}</span>
           </Link>
 
           <nav className="order-3 -mx-1 flex w-full items-center gap-0.5 overflow-x-auto sm:order-none sm:mx-0 sm:w-auto">
-            {NAV.map((item) => (
+            {nav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -59,7 +56,7 @@ export function AppShell({
               >
                 {item.label}
                 {item.href === "/deliveries" && deliveryAlerts > 0 && (
-                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                  <span className="ms-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
                     {deliveryAlerts}
                   </span>
                 )}
@@ -67,17 +64,18 @@ export function AppShell({
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ms-auto flex items-center gap-3">
+            <LanguageToggle />
             <Link href="/projects/new" className="btn-primary btn-sm hidden sm:inline-flex">
-              Open project
+              {t.nav.openProject}
             </Link>
-            <div className="hidden text-right sm:block">
+            <div className="hidden text-end sm:block">
               <div className="text-xs font-medium text-slate-900">{user.name}</div>
-              <div className="text-[11px] text-slate-500">{ROLE_LABEL[user.role] ?? user.role}</div>
+              <div className="text-[11px] text-slate-500">{t.roles[user.role] ?? user.role}</div>
             </div>
             <form action="/api/sign-out" method="post">
               <button type="submit" className="btn-ghost btn-sm">
-                Sign out
+                {t.nav.signOut}
               </button>
             </form>
           </div>

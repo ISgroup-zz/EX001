@@ -79,6 +79,29 @@ Demo sign-ins (all `password123`):
 | `pm@procurementhub.test` | Project manager | open projects, raise POs, post receipts, invoice |
 | `viewer@procurementhub.test` | Viewer | read everything, change nothing |
 
+## Arabic and right-to-left
+
+The interface ships in **English and Arabic**, switchable from the toggle in the header
+(also on the sign-in page, so nobody has to read an English form to get in). The choice
+is stored in a `locale` cookie and read **on the server**, so the document's `dir` is
+already correct in the first HTML sent — the layout never flips after hydration.
+
+- `src/lib/i18n/en.ts` is the source of truth; `ar.ts` is typed against it, so a missing
+  or misspelled Arabic key is a **compile error**, not an English word appearing mid-screen.
+- Layout mirrors properly because the styling uses **logical** properties (`ms-`/`me-`,
+  `ps-`/`pe-`, `text-start`/`text-end`, `border-s`/`border-e`, `start-`/`end-`) rather than
+  physical left/right, so one class set serves both directions.
+- **Numbers stay in Latin digits** (1,234.50) — the norm in Gulf business software and what
+  keeps invoices reconcilable against vendor and bank documents. Numeric spans carry
+  `unicode-bidi: isolate` so a figure like `$1,234.50` is never split apart by the bidi
+  algorithm inside Arabic text.
+- Strings that interpolate values use `fill()` with named placeholders rather than
+  concatenation, because Arabic word order does not follow English.
+
+Known gaps: dates render with English month abbreviations (`23 Aug 2026`), which is
+common in the region but not fully localised; and validation messages raised by the
+service layer are still English.
+
 ## How the app works
 
 ### A project is opened *on* a client document

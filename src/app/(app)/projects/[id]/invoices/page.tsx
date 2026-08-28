@@ -5,6 +5,9 @@ import { getProject } from "@/server/services/project";
 import { listProjectInvoices } from "@/server/services/invoice";
 import { getProjectSummary } from "@/server/services/reporting";
 import { formatDate, isPast } from "@/lib/dates";
+import { getT } from "@/server/locale";
+import { fill } from "@/lib/i18n";
+import { formatMoney } from "@/lib/money";
 
 export default async function ProjectInvoicesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,30 +15,31 @@ export default async function ProjectInvoicesPage({ params }: { params: Promise<
   if (!project) notFound();
 
   const [invoices, summary] = await Promise.all([listProjectInvoices(id), getProjectSummary(id)]);
+  const t = await getT();
 
   return (
     <section className="card overflow-hidden">
       <div className="card-header">
         <div>
-          <h2 className="card-title">Invoices</h2>
+          <h2 className="card-title">{t.projects.invoices}</h2>
           {summary.unbilledDeliveredMinor > 0 && (
             <p className="mt-0.5 text-xs text-amber-700">
-              <Money minor={summary.unbilledDeliveredMinor} currency={project.currency} /> delivered and not yet billed.
+              {fill(t.invoices.deliveredNotBilled, { amount: formatMoney(summary.unbilledDeliveredMinor, project.currency) })}
             </p>
           )}
         </div>
         <Link href={`/projects/${id}/invoices/new`} className="btn-primary btn-sm">
-          New invoice
+          {t.invoices.newInvoice}
         </Link>
       </div>
 
       {invoices.length === 0 ? (
         <EmptyState
-          title="No invoices yet"
-          description="Invoices draw from goods actually received, so post a receipt first and the quantities fill themselves in."
+          title={t.invoices.noInvoicesYet}
+          description={t.invoices.noInvoicesHint}
           action={
             <Link href={`/projects/${id}/invoices/new`} className="btn-primary btn-sm">
-              New invoice
+              {t.invoices.newInvoice}
             </Link>
           }
         />
@@ -44,15 +48,15 @@ export default async function ProjectInvoicesPage({ params }: { params: Promise<
           <table className="table table-hover">
             <thead>
               <tr>
-                <th>Invoice</th>
-                <th>Against</th>
-                <th>Issued</th>
-                <th>Due</th>
-                <th className="num text-right">Net</th>
-                <th className="num text-right">Total</th>
-                <th className="num text-right">Paid</th>
-                <th className="num text-right">Balance</th>
-                <th>Status</th>
+                <th>{t.invoices.invoice}</th>
+                <th>{t.invoices.againstCol}</th>
+                <th>{t.common.issued}</th>
+                <th>{t.common.due}</th>
+                <th className="num text-end">{t.common.net}</th>
+                <th className="num text-end">{t.common.total}</th>
+                <th className="num text-end">{t.invoices.paid}</th>
+                <th className="num text-end">{t.invoices.balance}</th>
+                <th>{t.common.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -70,18 +74,18 @@ export default async function ProjectInvoicesPage({ params }: { params: Promise<
                     <td className="tabular">{formatDate(invoice.issueDate)}</td>
                     <td className={`tabular ${overdue ? "font-medium text-red-700" : ""}`}>
                       {formatDate(invoice.dueDate)}
-                      {overdue && " · overdue"}
+                      {overdue && ` · ${t.common.overdue}`}
                     </td>
-                    <td className="num text-right">
+                    <td className="num text-end">
                       <Money minor={invoice.subtotalMinor} currency={invoice.currency} />
                     </td>
-                    <td className="num text-right font-medium">
+                    <td className="num text-end font-medium">
                       <Money minor={invoice.totalMinor} currency={invoice.currency} />
                     </td>
-                    <td className="num text-right text-emerald-700">
+                    <td className="num text-end text-emerald-700">
                       <Money minor={invoice.paidMinor} currency={invoice.currency} />
                     </td>
-                    <td className="num text-right">
+                    <td className="num text-end">
                       <Money minor={invoice.balanceMinor} currency={invoice.currency} />
                     </td>
                     <td>

@@ -5,6 +5,7 @@ import { getVendorPoDetail } from "@/server/services/vendorPo";
 import { getPlanForPo } from "@/server/services/deliveryPlan";
 import { formatDate, relativeDays } from "@/lib/dates";
 import { formatMoney, formatQty, lineTotalMinor, sumMinor } from "@/lib/money";
+import { getT } from "@/server/locale";
 
 export default async function VendorPoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,15 +19,16 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
   );
   const unplanned = po.coverage.filter((line) => line.unplannedQty > 0);
   const openTranches = plan.filter((item) => item.status !== "FULFILLED" && item.status !== "CANCELLED");
+  const t = await getT();
 
   return (
     <>
       <PageHeader
         title={po.poNumber}
         breadcrumb={[
-          { label: "Projects", href: "/projects" },
+          { label: t.projects.title, href: "/projects" },
           { label: po.project.code, href: `/projects/${po.project.id}` },
-          { label: "Vendor POs", href: `/projects/${po.project.id}/vendor-pos` },
+          { label: t.projects.vendorPos, href: `/projects/${po.project.id}/vendor-pos` },
           { label: po.poNumber },
         ]}
         subtitle={
@@ -34,18 +36,18 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
             <StatusBadge status={po.status} />
             <span className="font-medium text-slate-700">{po.vendor.name}</span>
             <span className="text-slate-300">·</span>
-            <span>issued {formatDate(po.issueDate)}</span>
+            <span>{t.common.issued} {formatDate(po.issueDate)}</span>
             {po.expectedDeliveryDate && (
               <>
                 <span className="text-slate-300">·</span>
-                <span>expected {formatDate(po.expectedDeliveryDate)}</span>
+                <span>{t.vendorPo.expectedDelivery} {formatDate(po.expectedDeliveryDate)}</span>
               </>
             )}
             {po.clientAgreement && (
               <>
                 <span className="text-slate-300">·</span>
                 <span className="inline-flex items-center gap-1.5">
-                  against
+                  {t.vendorPo.against}
                   <Link href={`/agreements/${po.clientAgreement.id}`} className="link tabular">
                     {po.clientAgreement.reference}
                   </Link>
@@ -56,27 +58,27 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
         }
         actions={
           <Link href={`/vendor-pos/${id}/grns/new`} className="btn-primary">
-            Receive goods
+            {t.vendorPo.receiveGoods}
           </Link>
         }
       />
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Order value (net)" value={formatMoney(po.totals.subtotalMinor, currency)} />
+        <KpiCard label={t.vendorPo.orderValueNet} value={formatMoney(po.totals.subtotalMinor, currency)} />
         <KpiCard
-          label="Received"
+          label={t.dashboard.received}
           value={formatMoney(receivedMinor, currency)}
-          hint={`${formatMoney(po.totals.subtotalMinor - receivedMinor, currency)} outstanding`}
+          hint={`${formatMoney(po.totals.subtotalMinor - receivedMinor, currency)} ${t.vendorPo.outstanding}`}
         />
-        <KpiCard label="Planned deliveries" value={plan.length} hint={`${openTranches.length} still open`} />
-        <KpiCard label="Goods receipts" value={po.grns.length} />
+        <KpiCard label={t.vendorPo.plannedDeliveriesCount} value={plan.length} hint={`${openTranches.length} ${t.vendorPo.stillOpen}`} />
+        <KpiCard label={t.projects.goodsReceipts} value={po.grns.length} />
       </section>
 
       {unplanned.length > 0 && (
         <div className="mb-6">
-          <Alert tone="warning" title="Part of this order has no planned delivery date">
+          <Alert tone="warning" title={t.vendorPo.unplannedWarning}>
             {unplanned.map((line) => `${line.description} (${formatQty(line.unplannedQty)} ${line.uom})`).join(", ")}.
-            Unplanned quantity does not appear in the forecast.
+            {t.vendorPo.unplannedWarningHint}
           </Alert>
         </div>
       )}
@@ -85,13 +87,13 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
       <section className="card mb-6 overflow-hidden">
         <div className="card-header">
           <div>
-            <h2 className="card-title">Delivery plan</h2>
-            <p className="mt-0.5 text-xs text-slate-500">What the vendor promised, and what has actually arrived.</p>
+            <h2 className="card-title">{t.vendorPo.deliveryPlan}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t.vendorPo.deliveryPlanHint}</p>
           </div>
         </div>
 
         {plan.length === 0 ? (
-          <EmptyState title="No planned deliveries" />
+          <EmptyState title={t.vendorPo.noPlannedDeliveries} />
         ) : (
           <ol className="divide-y divide-slate-100">
             {plan.map((item) => (
@@ -99,13 +101,13 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-slate-900">{item.label ?? `Delivery ${item.seq}`}</span>
+                      <span className="font-medium text-slate-900">{item.label ?? `${t.dashboard.delivery} ${item.seq}`}</span>
                       <StatusBadge status={item.isOverdue ? "OVERDUE" : item.status} />
                     </div>
                     <p className="mt-0.5 text-sm text-slate-500">
-                      Planned {formatDate(item.plannedDate)}{" "}
+                      {t.vendorPo.plannedOn} {formatDate(item.plannedDate)}{" "}
                       <span className={item.isOverdue ? "font-medium text-red-700" : ""}>
-                        ({relativeDays(item.plannedDate)})
+                        ({relativeDays(item.plannedDate, t)})
                       </span>
                       {" · "}
                       <Money minor={item.valueMinor} currency={currency} />
@@ -115,7 +117,7 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
 
                   {item.status !== "FULFILLED" && item.status !== "CANCELLED" && (
                     <Link href={`/vendor-pos/${id}/grns/new?planItemId=${item.id}`} className="btn-secondary btn-sm shrink-0">
-                      Receive this delivery
+                      {t.vendorPo.receiveThisDelivery}
                     </Link>
                   )}
                 </div>
@@ -124,22 +126,22 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-slate-500">
-                        <th className="pb-1 text-left font-medium">Line</th>
-                        <th className="pb-1 text-right font-medium">Planned</th>
-                        <th className="pb-1 text-right font-medium">Received</th>
-                        <th className="pb-1 text-right font-medium">Outstanding</th>
+                        <th className="pb-1 text-start font-medium">{t.common.line}</th>
+                        <th className="pb-1 text-end font-medium">{t.vendorPo.planned}</th>
+                        <th className="pb-1 text-end font-medium">{t.vendorPo.receivedCol}</th>
+                        <th className="pb-1 text-end font-medium">{t.vendorPo.outstandingCol}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {item.lines.map((line) => (
                         <tr key={line.vendorPoLineId} className="text-slate-700">
                           <td className="py-0.5">{line.description}</td>
-                          <td className="py-0.5 text-right tabular">
+                          <td className="py-0.5 text-end tabular">
                             {formatQty(line.plannedQuantity)} {line.uom}
                           </td>
-                          <td className="py-0.5 text-right tabular">{formatQty(line.receivedQuantity)}</td>
+                          <td className="py-0.5 text-end tabular">{formatQty(line.receivedQuantity)}</td>
                           <td
-                            className={`py-0.5 text-right tabular ${
+                            className={`py-0.5 text-end tabular ${
                               line.outstandingQuantity > 0 ? "font-medium text-amber-700" : "text-emerald-700"
                             }`}
                           >
@@ -158,21 +160,21 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
 
       <section className="card mb-6 overflow-hidden">
         <div className="card-header">
-          <h2 className="card-title">Order lines</h2>
+          <h2 className="card-title">{t.vendorPo.orderLines}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
                 <th className="w-10">#</th>
-                <th>Description</th>
-                <th className="num text-right">Ordered</th>
-                <th className="num text-right">Planned</th>
-                <th className="num text-right">Received</th>
-                <th style={{ width: "170px" }}>Progress</th>
-                <th className="num text-right">Unit cost</th>
-                <th className="num text-right">Line total</th>
-                <th>Client line</th>
+                <th>{t.common.description}</th>
+                <th className="num text-end">{t.grn.ordered}</th>
+                <th className="num text-end">{t.vendorPo.planned}</th>
+                <th className="num text-end">{t.vendorPo.receivedCol}</th>
+                <th style={{ width: "170px" }}>{t.vendorPo.progress}</th>
+                <th className="num text-end">{t.vendorPo.unitCost}</th>
+                <th className="num text-end">{t.common.lineTotal}</th>
+                <th>{t.vendorPo.clientLine}</th>
               </tr>
             </thead>
             <tbody>
@@ -182,11 +184,11 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
                   <tr key={line.id}>
                     <td className="text-xs text-slate-400">{line.lineNo}</td>
                     <td className="text-slate-900">{line.description}</td>
-                    <td className="num text-right tabular">
+                    <td className="num text-end tabular">
                       {formatQty(line.quantity)} {line.uom}
                     </td>
-                    <td className="num text-right tabular">{cover ? formatQty(cover.plannedQty) : "—"}</td>
-                    <td className="num text-right tabular">{cover ? formatQty(cover.receivedQty) : "—"}</td>
+                    <td className="num text-end tabular">{cover ? formatQty(cover.plannedQty) : "—"}</td>
+                    <td className="num text-end tabular">{cover ? formatQty(cover.receivedQty) : "—"}</td>
                     <td>
                       {cover && (
                         <CoverageCell
@@ -197,17 +199,17 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
                         />
                       )}
                     </td>
-                    <td className="num text-right">
+                    <td className="num text-end">
                       <Money minor={line.unitCostMinor} currency={currency} />
                     </td>
-                    <td className="num text-right font-medium">
+                    <td className="num text-end font-medium">
                       <Money minor={lineTotalMinor(line.quantity, line.unitCostMinor)} currency={currency} />
                     </td>
                     <td className="text-xs">
                       {line.clientAgreementLine ? (
                         <span className="text-emerald-700">{line.clientAgreementLine.agreement.reference}</span>
                       ) : (
-                        <span className="text-slate-400">not linked</span>
+                        <span className="text-slate-400">{t.common.notLinked}</span>
                       )}
                     </td>
                   </tr>
@@ -220,20 +222,20 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
 
       <section className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="card-title">Goods receipts</h2>
+          <h2 className="card-title">{t.projects.goodsReceipts}</h2>
         </div>
         {po.grns.length === 0 ? (
-          <EmptyState title="Nothing received yet" />
+          <EmptyState title={t.vendorPo.nothingReceived} />
         ) : (
           <table className="table table-hover">
             <thead>
               <tr>
-                <th>GRN</th>
-                <th>Received</th>
-                <th>Against</th>
-                <th>Delivery note</th>
-                <th className="num text-right">Lines</th>
-                <th>Status</th>
+                <th>{t.grn.grnNumber}</th>
+                <th>{t.vendorPo.receivedCol}</th>
+                <th>{t.vendorPo.againstPlan}</th>
+                <th>{t.vendorPo.deliveryNote}</th>
+                <th className="num text-end">{t.common.lines}</th>
+                <th>{t.common.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -247,11 +249,11 @@ export default async function VendorPoPage({ params }: { params: Promise<{ id: s
                   <td className="tabular">{formatDate(grn.receivedDate)}</td>
                   <td className="text-sm text-slate-600">
                     {grn.deliveryPlanItem
-                      ? grn.deliveryPlanItem.label ?? `Delivery ${grn.deliveryPlanItem.seq}`
-                      : "unplanned"}
+                      ? grn.deliveryPlanItem.label ?? `${t.dashboard.delivery} ${grn.deliveryPlanItem.seq}`
+                      : t.vendorPo.unplanned}
                   </td>
                   <td className="text-sm text-slate-600">{grn.deliveryNoteRef ?? "—"}</td>
-                  <td className="num text-right tabular">{grn.lines.length}</td>
+                  <td className="num text-end tabular">{grn.lines.length}</td>
                   <td>
                     <StatusBadge status={grn.status} />
                   </td>

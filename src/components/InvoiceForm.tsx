@@ -7,6 +7,7 @@ import { Alert, Field } from "./ui";
 import { createInvoiceAction } from "@/server/actions/invoices";
 import { formatMoney, formatQty, parseMoneyToMinor, parseQty } from "@/lib/money";
 import type { BillableLine } from "@/server/services/invoice";
+import { useT } from "./LocaleProvider";
 
 /**
  * Building a client invoice.
@@ -51,6 +52,7 @@ export function InvoiceForm({
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState(createInvoiceAction, null);
+  const t = useT();
 
   const [rows, setRows] = useState<Row[]>(() =>
     billable.map((line) => ({
@@ -111,7 +113,7 @@ export function InvoiceForm({
       <FormMessage state={state} />
 
       <div className="card grid gap-4 p-5 sm:grid-cols-3">
-        <Field label="Bill against" htmlFor="agreementPicker" hint="Each invoice is raised against one client document.">
+        <Field label={t.invoices.billAgainst} htmlFor="agreementPicker" hint={t.invoices.billAgainstHint}>
           <select
             id="agreementPicker"
             className="select"
@@ -127,10 +129,10 @@ export function InvoiceForm({
             ))}
           </select>
         </Field>
-        <Field label="Invoice date" htmlFor="issueDate">
+        <Field label={t.invoices.invoiceDate} htmlFor="issueDate">
           <input id="issueDate" name="issueDate" type="date" required defaultValue={today} className="input" />
         </Field>
-        <Field label="Due date" htmlFor="dueDate" hint="Defaults to the client's payment terms.">
+        <Field label={t.invoices.dueDate} htmlFor="dueDate" hint={t.invoices.dueDateHint}>
           <input id="dueDate" name="dueDate" type="date" defaultValue={dueDate} className="input" />
         </Field>
       </div>
@@ -138,47 +140,47 @@ export function InvoiceForm({
       <div className="card overflow-hidden">
         <div className="card-header">
           <div>
-            <h2 className="card-title">Lines</h2>
+            <h2 className="card-title">{t.common.lines}</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Billable = delivered, less what has already been invoiced. Zero a line to leave it for next time.
+              {t.invoices.linesHint}
             </p>
           </div>
           <div className="flex gap-2">
             <button type="button" className="btn-secondary btn-sm" onClick={billEverything}>
-              Bill everything billable
+              {t.invoices.billEverything}
             </button>
             <button type="button" className="btn-ghost btn-sm" onClick={clearAll}>
-              Clear
+              {t.grn.clear}
             </button>
           </div>
         </div>
 
         {rows.length === 0 ? (
           <div className="empty-state">
-            <p className="text-sm font-medium text-slate-700">This document has no lines to bill</p>
-            <p className="text-sm text-slate-500">Lump-sum documents are invoiced from the project instead.</p>
+            <p className="text-sm font-medium text-slate-700">{t.invoices.noLinesToBill}</p>
+            <p className="text-sm text-slate-500">{t.invoices.noLinesToBillHint}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Description</th>
-                  <th className="num text-right">Ordered</th>
-                  <th className="num text-right">Delivered</th>
-                  <th className="num text-right">Invoiced</th>
-                  <th className="num text-right">Billable</th>
-                  <th className="num text-right" style={{ width: "120px" }}>
-                    Bill now
+                  <th>{t.common.description}</th>
+                  <th className="num text-end">{t.invoices.orderedCol}</th>
+                  <th className="num text-end">{t.invoices.deliveredCol}</th>
+                  <th className="num text-end">{t.invoices.invoicedCol}</th>
+                  <th className="num text-end">{t.invoices.billableCol}</th>
+                  <th className="num text-end" style={{ width: "120px" }}>
+                    {t.invoices.billNow}
                   </th>
-                  <th className="num text-right" style={{ width: "130px" }}>
-                    Unit price
+                  <th className="num text-end" style={{ width: "130px" }}>
+                    {t.common.unitPrice}
                   </th>
-                  <th className="num text-right" style={{ width: "90px" }}>
-                    Tax %
+                  <th className="num text-end" style={{ width: "90px" }}>
+                    {t.common.tax} %
                   </th>
-                  <th className="num text-right" style={{ width: "130px" }}>
-                    Line total
+                  <th className="num text-end" style={{ width: "130px" }}>
+                    {t.common.lineTotal}
                   </th>
                 </tr>
               </thead>
@@ -191,20 +193,20 @@ export function InvoiceForm({
                       <td>
                         <div className="text-slate-900">{row.description}</div>
                         {!row.hasVendorCoverage && (
-                          <div className="text-[11px] text-slate-400">no vendor line — billable in full</div>
+                          <div className="text-[11px] text-slate-400">{t.invoices.noVendorLine}</div>
                         )}
                       </td>
-                      <td className="num text-right tabular text-slate-500">
+                      <td className="num text-end tabular text-slate-500">
                         {formatQty(row.orderedQty)} {row.uom}
                       </td>
-                      <td className="num text-right tabular">{formatQty(row.deliveredQty)}</td>
-                      <td className="num text-right tabular text-slate-500">{formatQty(row.invoicedQty)}</td>
-                      <td className="num text-right tabular font-medium text-emerald-700">
+                      <td className="num text-end tabular">{formatQty(row.deliveredQty)}</td>
+                      <td className="num text-end tabular text-slate-500">{formatQty(row.invoicedQty)}</td>
+                      <td className="num text-end tabular font-medium text-emerald-700">
                         {formatQty(row.billableQty)}
                       </td>
                       <td>
                         <input
-                          className={`grid-input text-right tabular ${over ? "border-red-400 bg-red-50" : ""}`}
+                          className={`grid-input text-end tabular ${over ? "border-red-400 bg-red-50" : ""}`}
                           inputMode="decimal"
                           value={row.quantity}
                           onChange={(event) => setRow(row.clientAgreementLineId, { quantity: event.target.value })}
@@ -212,7 +214,7 @@ export function InvoiceForm({
                       </td>
                       <td>
                         <input
-                          className="grid-input text-right tabular"
+                          className="grid-input text-end tabular"
                           inputMode="decimal"
                           value={row.unitPrice}
                           onChange={(event) => setRow(row.clientAgreementLineId, { unitPrice: event.target.value })}
@@ -220,13 +222,13 @@ export function InvoiceForm({
                       </td>
                       <td>
                         <input
-                          className="grid-input text-right tabular"
+                          className="grid-input text-end tabular"
                           inputMode="decimal"
                           value={row.taxRatePct}
                           onChange={(event) => setRow(row.clientAgreementLineId, { taxRatePct: event.target.value })}
                         />
                       </td>
-                      <td className="num text-right font-medium tabular">
+                      <td className="num text-end font-medium tabular">
                         {formatMoney(Math.round(quantity * parseMoneyToMinor(row.unitPrice)), currency)}
                       </td>
                     </tr>
@@ -235,22 +237,22 @@ export function InvoiceForm({
               </tbody>
               <tfoot>
                 <tr className="border-t border-slate-200 bg-slate-50 text-sm">
-                  <td colSpan={8} className="px-4 py-2 text-right font-medium text-slate-600">
-                    Net
+                  <td colSpan={8} className="px-4 py-2 text-end font-medium text-slate-600">
+                    {t.common.net}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold tabular">{formatMoney(totals.net, currency)}</td>
+                  <td className="px-4 py-2 text-end font-semibold tabular">{formatMoney(totals.net, currency)}</td>
                 </tr>
                 <tr className="bg-slate-50 text-sm">
-                  <td colSpan={8} className="px-4 py-2 text-right font-medium text-slate-600">
-                    Tax
+                  <td colSpan={8} className="px-4 py-2 text-end font-medium text-slate-600">
+                    {t.common.tax}
                   </td>
-                  <td className="px-4 py-2 text-right tabular">{formatMoney(totals.tax, currency)}</td>
+                  <td className="px-4 py-2 text-end tabular">{formatMoney(totals.tax, currency)}</td>
                 </tr>
                 <tr className="bg-slate-50 text-sm">
-                  <td colSpan={8} className="px-4 py-2 text-right font-semibold text-slate-700">
-                    Total
+                  <td colSpan={8} className="px-4 py-2 text-end font-semibold text-slate-700">
+                    {t.common.total}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold tabular">{formatMoney(totals.gross, currency)}</td>
+                  <td className="px-4 py-2 text-end font-semibold tabular">{formatMoney(totals.gross, currency)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -259,29 +261,27 @@ export function InvoiceForm({
       </div>
 
       {!anythingBillable && rows.length > 0 && (
-        <Alert tone="warning" title="Nothing is billable on this document yet">
-          Everything delivered has already been invoiced. Post the next goods receipt and the billable quantity will
-          appear here.
+        <Alert tone="warning" title={t.invoices.nothingBillable}>
+          {t.invoices.nothingBillableHint}
         </Alert>
       )}
 
       {overBilled && (
-        <Alert tone="danger" title="More than has been delivered">
-          One or more lines bill above the billable quantity. Reduce them — an invoice can only cover goods actually
-          received.
+        <Alert tone="danger" title={t.invoices.overBilled}>
+          {t.invoices.overBilledHint}
         </Alert>
       )}
 
-      <Field label="Notes" htmlFor="notes">
-        <textarea id="notes" name="notes" className="textarea" placeholder="Anything to appear on the invoice" />
+      <Field label={t.common.notes} htmlFor="notes">
+        <textarea id="notes" name="notes" className="textarea" placeholder={t.invoices.notesPlaceholder} />
       </Field>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         <SubmitButton name="intent" value="draft" className="btn-secondary" disabled={nothingToBill}>
-          Save as draft
+          {t.grn.saveDraft}
         </SubmitButton>
-        <SubmitButton name="intent" value="issue" pendingLabel="Issuing…" disabled={nothingToBill}>
-          Issue invoice
+        <SubmitButton name="intent" value="issue" pendingLabel={t.invoices.issuing} disabled={nothingToBill}>
+          {t.invoices.issueInvoice}
         </SubmitButton>
       </div>
     </form>

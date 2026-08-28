@@ -5,6 +5,8 @@ import { EmptyState, Money, StatusBadge } from "@/components/ui";
 import { getProject } from "@/server/services/project";
 import { getBudgetTimeline } from "@/server/services/budget";
 import { formatDate } from "@/lib/dates";
+import { fill } from "@/lib/i18n";
+import { getT } from "@/server/locale";
 
 export default async function ProjectAgreementsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,35 +15,36 @@ export default async function ProjectAgreementsPage({ params }: { params: Promis
 
   const timeline = await getBudgetTimeline(id);
   const budgetMinor = timeline.at(-1)?.runningBudgetMinor ?? 0;
+  const t = await getT();
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <section className="card overflow-hidden lg:col-span-2">
         <div className="card-header">
           <div>
-            <h2 className="card-title">Client documents</h2>
+            <h2 className="card-title">{t.agreements.clientDocuments}</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Purchase orders, contracts, frameworks and variations received from {project.client.name}.
+              {fill(t.agreements.receivedFrom, { client: project.client.name })}
             </p>
           </div>
           <Link href={`/projects/${id}/agreements/new`} className="btn-primary btn-sm">
-            Add document
+            {t.projects.addDocument}
           </Link>
         </div>
 
         {timeline.length === 0 ? (
-          <EmptyState title="No documents" />
+          <EmptyState title={t.agreements.noDocuments} />
         ) : (
           <div className="overflow-x-auto">
             <table className="table table-hover">
               <thead>
                 <tr>
-                  <th>Reference</th>
-                  <th>Type</th>
-                  <th>Issued</th>
-                  <th className="num text-right">Document value</th>
-                  <th className="num text-right">Effect on budget</th>
-                  <th>Status</th>
+                  <th>{t.common.reference}</th>
+                  <th>{t.agreements.documentType}</th>
+                  <th>{t.common.issued}</th>
+                  <th className="num text-end">{t.agreements.documentValue}</th>
+                  <th className="num text-end">{t.agreements.effectOnBudget}</th>
+                  <th>{t.common.status}</th>
                 </tr>
               </thead>
               <tbody>
@@ -54,11 +57,11 @@ export default async function ProjectAgreementsPage({ params }: { params: Promis
                       {entry.title && <div className="truncate text-xs text-slate-500">{entry.title}</div>}
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {entry.isOriginating && (
-                          <span className="badge bg-slate-900 text-white ring-slate-900">opening document</span>
+                          <span className="badge bg-slate-900 text-white ring-slate-900">{t.projects.openingDocument}</span>
                         )}
                         {entry.isCallOff && (
                           <span className="badge bg-slate-100 text-slate-600 ring-slate-200">
-                            call-off on {entry.parentReference}
+                            {fill(t.agreements.callOffOn, { reference: entry.parentReference ?? "" })}
                           </span>
                         )}
                       </div>
@@ -67,12 +70,12 @@ export default async function ProjectAgreementsPage({ params }: { params: Promis
                       <StatusBadge status={entry.type} />
                     </td>
                     <td className="tabular">{formatDate(entry.issueDate)}</td>
-                    <td className="num text-right">
+                    <td className="num text-end">
                       <Money minor={entry.valueMinor} currency={project.currency} />
                     </td>
-                    <td className="num text-right">
+                    <td className="num text-end">
                       {entry.deltaMinor === 0 ? (
-                        <span className="text-xs text-slate-400">no change</span>
+                        <span className="text-xs text-slate-400">{t.agreements.noChange}</span>
                       ) : (
                         <span className={entry.deltaMinor > 0 ? "font-medium text-emerald-700" : "font-medium text-red-700"}>
                           {entry.deltaMinor > 0 ? "+" : "−"}
@@ -88,10 +91,10 @@ export default async function ProjectAgreementsPage({ params }: { params: Promis
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50">
-                  <td colSpan={4} className="px-4 py-3 text-right text-sm font-medium text-slate-600">
-                    Project budget
+                  <td colSpan={4} className="px-4 py-3 text-end text-sm font-medium text-slate-600">
+                    {t.agreements.projectBudget}
                   </td>
-                  <td className="num px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                  <td className="num px-4 py-3 text-end text-sm font-semibold text-slate-900">
                     <Money minor={budgetMinor} currency={project.currency} />
                   </td>
                   <td />
@@ -104,10 +107,10 @@ export default async function ProjectAgreementsPage({ params }: { params: Promis
 
       <section className="card">
         <div className="card-header">
-          <h2 className="card-title">Budget timeline</h2>
+          <h2 className="card-title">{t.agreements.budgetTimeline}</h2>
         </div>
         <div className="p-5">
-          <BudgetTimeline entries={timeline} currency={project.currency} />
+          <BudgetTimeline entries={timeline} currency={project.currency} t={t} />
         </div>
       </section>
     </div>

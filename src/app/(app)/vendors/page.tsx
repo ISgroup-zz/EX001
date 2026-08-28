@@ -1,15 +1,15 @@
 import { PartyManager } from "@/components/PartyManager";
 import { PageHeader } from "@/components/ui";
 import { listVendors } from "@/server/services/masterData";
-
-export const metadata = { title: "Vendors · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 export default async function VendorsPage() {
   const vendors = await listVendors();
+  const t = await getT();
 
   return (
     <>
-      <PageHeader title="Vendors" subtitle="The suppliers we raise purchase orders with and receive goods from." />
+      <PageHeader title={t.parties.vendorsTitle} subtitle={t.parties.vendorsSubtitle} />
       <PartyManager kind="vendor" parties={vendors} />
     </>
   );

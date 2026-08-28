@@ -2,18 +2,18 @@ import { UserManager } from "@/components/UserManager";
 import { Alert, PageHeader } from "@/components/ui";
 import { requireUser, hasRole } from "@/server/auth";
 import { listUsers } from "@/server/services/masterData";
-
-export const metadata = { title: "Users · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 export default async function UsersPage() {
   const currentUser = await requireUser();
+  const t = await getT();
 
   if (!hasRole(currentUser, "ADMIN")) {
     return (
       <>
-        <PageHeader title="Users" />
-        <Alert tone="warning" title="Admins only">
-          Ask an administrator if you need someone added or a role changed.
+        <PageHeader title={t.users.title} />
+        <Alert tone="warning" title={t.users.adminsOnly}>
+          {t.users.adminsOnlyHint}
         </Alert>
       </>
     );
@@ -23,7 +23,7 @@ export default async function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Users" subtitle="Who can sign in, and what they are allowed to do." />
+      <PageHeader title={t.users.title} subtitle={t.users.subtitle} />
       <UserManager users={users} />
     </>
   );

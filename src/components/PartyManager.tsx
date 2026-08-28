@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import { FormMessage, SubmitButton } from "./Form";
 import { Field } from "./ui";
 import { saveClientAction, saveVendorAction } from "@/server/actions/masterData";
+import { useT } from "./LocaleProvider";
+import { fill } from "@/lib/i18n";
 
 /** Create or edit a client or vendor — the same form either way. */
 
@@ -24,6 +26,7 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
   const [state, formAction] = useActionState(action, null);
   const [editing, setEditing] = useState<Party | null>(null);
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   const start = (party: Party | null) => {
     setEditing(party);
@@ -34,16 +37,16 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
     <div className="space-y-5">
       <div className="flex justify-end">
         <button type="button" className="btn-primary" onClick={() => start(null)}>
-          Add {kind}
+          {kind === "client" ? t.parties.addClient : t.parties.addVendor}
         </button>
       </div>
 
       {open && (
         <form key={editing?.id ?? "new"} action={formAction} className="card space-y-4 p-5">
           <div className="flex items-center justify-between">
-            <h2 className="card-title">{editing ? `Edit ${editing.name}` : `New ${kind}`}</h2>
+            <h2 className="card-title">{editing ? fill(t.parties.editParty, { name: editing.name }) : kind === "client" ? t.parties.newClient : t.parties.newVendor}</h2>
             <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
-              Close
+              {t.common.close}
             </button>
           </div>
 
@@ -51,16 +54,16 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
           {editing && <input type="hidden" name="id" value={editing.id} />}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Name" htmlFor="name">
+            <Field label={t.parties.name} htmlFor="name">
               <input id="name" name="name" required defaultValue={editing?.name ?? ""} className="input" />
             </Field>
-            <Field label="Code" htmlFor="code" hint="Blank generates one.">
+            <Field label={t.parties.code} htmlFor="code" hint={t.parties.codeHint}>
               <input id="code" name="code" defaultValue={editing?.code ?? ""} className="input tabular" />
             </Field>
-            <Field label="Contact" htmlFor="contactName">
+            <Field label={t.parties.contact} htmlFor="contactName">
               <input id="contactName" name="contactName" defaultValue={editing?.contactName ?? ""} className="input" />
             </Field>
-            <Field label="Payment terms (days)" htmlFor="paymentTermsDays">
+            <Field label={t.parties.paymentTerms} htmlFor="paymentTermsDays">
               <input
                 id="paymentTermsDays"
                 name="paymentTermsDays"
@@ -68,22 +71,22 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
                 className="input tabular"
               />
             </Field>
-            <Field label="Email" htmlFor="email">
+            <Field label={t.parties.email} htmlFor="email">
               <input id="email" name="email" type="email" defaultValue={editing?.email ?? ""} className="input" />
             </Field>
-            <Field label="Phone" htmlFor="phone">
+            <Field label={t.parties.phone} htmlFor="phone">
               <input id="phone" name="phone" defaultValue={editing?.phone ?? ""} className="input" />
             </Field>
-            <Field label="Tax ID" htmlFor="taxId">
+            <Field label={t.parties.taxId} htmlFor="taxId">
               <input id="taxId" name="taxId" defaultValue={editing?.taxId ?? ""} className="input tabular" />
             </Field>
-            <Field label="Address" htmlFor="address" className="sm:col-span-2 lg:col-span-4">
+            <Field label={t.parties.address} htmlFor="address" className="sm:col-span-2 lg:col-span-4">
               <textarea id="address" name="address" defaultValue={editing?.address ?? ""} className="textarea" />
             </Field>
           </div>
 
           <div className="flex justify-end">
-            <SubmitButton>{editing ? "Save changes" : `Create ${kind}`}</SubmitButton>
+            <SubmitButton>{editing ? t.common.saveChanges : kind === "client" ? t.parties.createClient : t.parties.createVendor}</SubmitButton>
           </div>
         </form>
       )}
@@ -91,9 +94,9 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
       <div className="card overflow-hidden">
         {parties.length === 0 ? (
           <div className="empty-state">
-            <p className="text-sm font-medium text-slate-700">No {kind}s yet</p>
+            <p className="text-sm font-medium text-slate-700">{kind === "client" ? t.parties.noClients : t.parties.noVendors}</p>
             <button type="button" className="btn-primary btn-sm mt-2" onClick={() => start(null)}>
-              Add {kind}
+              {kind === "client" ? t.parties.addClient : t.parties.addVendor}
             </button>
           </div>
         ) : (
@@ -101,11 +104,11 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
             <table className="table table-hover">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Code</th>
-                  <th>Contact</th>
-                  <th>Email</th>
-                  <th className="num text-right">Terms</th>
+                  <th>{t.parties.name}</th>
+                  <th>{t.parties.code}</th>
+                  <th>{t.parties.contact}</th>
+                  <th>{t.parties.email}</th>
+                  <th className="num text-end">{t.parties.terms}</th>
                   <th className="w-20" />
                 </tr>
               </thead>
@@ -116,10 +119,10 @@ export function PartyManager({ kind, parties }: { kind: "client" | "vendor"; par
                     <td className="tabular text-slate-500">{party.code}</td>
                     <td>{party.contactName ?? "—"}</td>
                     <td className="text-slate-600">{party.email ?? "—"}</td>
-                    <td className="num text-right tabular">{party.paymentTermsDays} days</td>
-                    <td className="text-right">
+                    <td className="num text-end tabular">{party.paymentTermsDays} {t.parties.days}</td>
+                    <td className="text-end">
                       <button type="button" className="btn-ghost btn-sm" onClick={() => start(party)}>
-                        Edit
+                        {t.common.edit}
                       </button>
                     </td>
                   </tr>

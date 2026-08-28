@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, signIn } from "@/server/auth";
-
-export const metadata = { title: "Sign in · Procurement Hub" };
+import { getT } from "@/server/locale";
+import { LanguageToggle } from "@/components/LanguageToggle";
 
 export default async function LoginPage({
   searchParams,
@@ -11,28 +11,35 @@ export default async function LoginPage({
   const user = await getCurrentUser();
   if (user) redirect("/");
 
+  const t = await getT();
   const { error } = await searchParams;
 
   async function authenticate(formData: FormData) {
     "use server";
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const dictionary = await getT();
+
     const result = await signIn(email, password);
-    if (!result.ok) redirect(`/login?error=${encodeURIComponent(result.error ?? "Sign-in failed.")}`);
+    if (!result.ok) redirect(`/login?error=${encodeURIComponent(dictionary.auth.invalid)}`);
     redirect("/");
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center gap-2.5">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-base font-bold text-white">
-            P
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-900">Procurement Hub</h1>
-            <p className="text-xs text-slate-500">Projects, purchase orders, deliveries and invoicing</p>
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-base font-bold text-white">
+              P
+            </span>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t.app.name}</h1>
+              <p className="text-xs text-slate-500">{t.app.tagline}</p>
+            </div>
           </div>
+          {/* Offered before sign-in, so an Arabic speaker never has to read an English form. */}
+          <LanguageToggle />
         </div>
 
         <form action={authenticate} className="card space-y-4 p-5">
@@ -42,14 +49,23 @@ export default async function LoginPage({
 
           <div>
             <label className="label" htmlFor="email">
-              Email
+              {t.auth.email}
             </label>
-            <input id="email" name="email" type="email" required autoFocus autoComplete="email" className="input" />
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              dir="ltr"
+              className="input text-start"
+            />
           </div>
 
           <div>
             <label className="label" htmlFor="password">
-              Password
+              {t.auth.password}
             </label>
             <input
               id="password"
@@ -57,20 +73,24 @@ export default async function LoginPage({
               type="password"
               required
               autoComplete="current-password"
-              className="input"
+              dir="ltr"
+              className="input text-start"
             />
           </div>
 
           <button type="submit" className="btn-primary w-full">
-            Sign in
+            {t.auth.signIn}
           </button>
         </form>
 
         <div className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
-          <p className="mb-1 font-medium text-slate-700">Demo sign-ins</p>
-          <p className="tabular">admin@procurementhub.test · password123</p>
-          <p className="tabular">pm@procurementhub.test · password123</p>
-          <p className="tabular">viewer@procurementhub.test · password123</p>
+          <p className="mb-1 font-medium text-slate-700">{t.auth.demoSignIns}</p>
+          {/* Credentials are Latin script — pinned LTR so they read correctly in Arabic. */}
+          <div dir="ltr" className="text-start">
+            <p className="tabular">admin@procurementhub.test · password123</p>
+            <p className="tabular">pm@procurementhub.test · password123</p>
+            <p className="tabular">viewer@procurementhub.test · password123</p>
+          </div>
         </div>
       </div>
     </div>

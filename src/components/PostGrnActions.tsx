@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { FormMessage, SubmitButton } from "./Form";
 import { deleteGrnAction, postGrnAction } from "@/server/actions/grns";
+import { useT } from "./LocaleProvider";
 
 /** Post or discard a draft receipt. Posted receipts are immutable, so nothing is offered. */
 export function PostGrnActions({
@@ -16,6 +17,7 @@ export function PostGrnActions({
 }) {
   const [postState, post] = useActionState(postGrnAction, null);
   const [deleteState, remove] = useActionState(deleteGrnAction, null);
+  const t = useT();
 
   if (status === "POSTED") return null;
 
@@ -25,14 +27,14 @@ export function PostGrnActions({
         <form action={remove}>
           <input type="hidden" name="grnId" value={grnId} />
           <input type="hidden" name="vendorPoId" value={vendorPoId} />
-          <SubmitButton className="btn-danger" pendingLabel="Discarding…">
-            Discard draft
+          <SubmitButton className="btn-danger" pendingLabel={t.grn.discarding}>
+            {t.grn.discardDraft}
           </SubmitButton>
         </form>
         <form action={post}>
           <input type="hidden" name="grnId" value={grnId} />
           <input type="hidden" name="vendorPoId" value={vendorPoId} />
-          <SubmitButton pendingLabel="Posting…">Post receipt</SubmitButton>
+          <SubmitButton pendingLabel={t.grn.posting}>{t.grn.postReceipt}</SubmitButton>
         </form>
       </div>
       <FormMessage state={postState ?? deleteState} />

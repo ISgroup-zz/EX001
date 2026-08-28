@@ -6,8 +6,7 @@ import { getProject } from "@/server/services/project";
 import { getOrderableAgreementLines } from "@/server/services/vendorPo";
 import { prisma } from "@/server/db";
 import { toDateInput } from "@/lib/dates";
-
-export const metadata = { title: "New vendor PO · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 export default async function NewVendorPoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,21 +22,22 @@ export default async function NewVendorPoPage({ params }: { params: Promise<{ id
       orderBy: { issueDate: "asc" },
     }),
   ]);
+  const t = await getT();
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-5">
-        <h2 className="text-lg font-semibold text-slate-900">New vendor purchase order</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{t.vendorPo.newTitle}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Order from a vendor against this project, and record when the vendor has promised to deliver.
+          {t.vendorPo.newSubtitle}
         </p>
       </div>
 
       {vendors.length === 0 ? (
-        <Alert tone="warning" title="No vendors yet">
-          Add a vendor first.{" "}
+        <Alert tone="warning" title={t.vendorPo.noVendors}>
+          {t.vendorPo.noVendorsHint}{" "}
           <Link href="/vendors" className="link">
-            Go to vendors
+            {t.vendorPo.goToVendors}
           </Link>
         </Alert>
       ) : (

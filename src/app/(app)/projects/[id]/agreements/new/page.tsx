@@ -3,8 +3,7 @@ import { AddAgreementForm, type ParentOption } from "@/components/AddAgreementFo
 import { getProject } from "@/server/services/project";
 import { getFrameworkUsage, loadProjectAgreements } from "@/server/services/budget";
 import { toDateInput } from "@/lib/dates";
-
-export const metadata = { title: "Add client document · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 export default async function NewAgreementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,14 +28,14 @@ export default async function NewAgreementPage({ params }: { params: Promise<{ i
   const amendable: ParentOption[] = live
     .filter((agreement) => agreement.type === "CONTRACT" || agreement.type === "FRAMEWORK")
     .map((agreement) => ({ id: agreement.id, reference: agreement.reference, type: agreement.type }));
+  const t = await getT();
 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-5">
-        <h2 className="text-lg font-semibold text-slate-900">Add a client document</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{t.agreements.addTitle}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Recording what the client has sent keeps the project budget current — every new order, contract or variation
-          moves it.
+          {t.agreements.addSubtitle}
         </p>
       </div>
 

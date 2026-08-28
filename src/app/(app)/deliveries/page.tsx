@@ -3,8 +3,8 @@ import { EmptyState, KpiCard, Money, PageHeader, StatusBadge } from "@/component
 import { getScheduleHealth, getUpcomingDeliveries, type UpcomingDelivery } from "@/server/services/forecast";
 import { formatDate, relativeDays } from "@/lib/dates";
 import { formatMoneyCompact, formatPercent, formatQty } from "@/lib/money";
-
-export const metadata = { title: "Deliveries · Procurement Hub" };
+import { getT } from "@/server/locale";
+import { fill, type Dictionary } from "@/lib/i18n";
 
 /**
  * The PM work queue: every open tranche across every project, soonest first, each one
@@ -22,6 +22,7 @@ export default async function DeliveriesPage({
     getUpcomingDeliveries({ withinDays: horizon }),
     getScheduleHealth(),
   ]);
+  const t = await getT();
 
   const overdue = deliveries.filter((delivery) => delivery.isOverdue);
   const thisWeek = deliveries.filter((delivery) => !delivery.isOverdue && delivery.daysAway <= 7);
@@ -30,14 +31,14 @@ export default async function DeliveriesPage({
   return (
     <>
       <PageHeader
-        title="Deliveries"
-        subtitle="Planned deliveries from every vendor purchase order. Receiving one takes a single click."
+        title={t.deliveries.title}
+        subtitle={t.deliveries.subtitle}
         actions={
           <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
             {[
-              { days: 30, label: "30 days" },
-              { days: 90, label: "90 days" },
-              { days: 365, label: "1 year" },
+              { days: 30, label: t.deliveries.window30 },
+              { days: 90, label: t.deliveries.window90 },
+              { days: 365, label: t.deliveries.window365 },
             ].map((option) => (
               <Link
                 key={option.days}
@@ -55,20 +56,20 @@ export default async function DeliveriesPage({
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Overdue"
+          label={t.deliveries.overdue}
           value={health.overdueCount}
           hint={formatMoneyCompact(health.overdueValueMinor)}
           tone={health.overdueCount > 0 ? "negative" : "positive"}
         />
-        <KpiCard label="Due in 7 days" value={health.dueNext7} />
-        <KpiCard label="Due in 30 days" value={health.dueNext30} />
+        <KpiCard label={t.deliveries.dueIn7} value={health.dueNext7} />
+        <KpiCard label={t.deliveries.dueIn30} value={health.dueNext30} />
         <KpiCard
-          label="On-time record"
+          label={t.deliveries.onTimeRecord}
           value={health.onTimePct === null ? "—" : formatPercent(health.onTimePct, 0)}
           hint={
             health.averageSlipDays === null
-              ? "No receipts measured yet"
-              : `Average slip ${health.averageSlipDays.toFixed(1)} days over ${health.receiptsMeasured} receipts`
+              ? t.deliveries.noReceiptsMeasured
+              : fill(t.deliveries.averageSlipOver, { days: health.averageSlipDays.toFixed(1), count: health.receiptsMeasured })
           }
           tone={health.onTimePct !== null && health.onTimePct < 70 ? "warning" : "default"}
         />
@@ -77,15 +78,15 @@ export default async function DeliveriesPage({
       {deliveries.length === 0 ? (
         <div className="card">
           <EmptyState
-            title="Nothing planned in this window"
-            description="Delivery plans are recorded when a vendor PO is raised — every tranche shows up here."
+            title={t.deliveries.nothingPlanned}
+            description={t.deliveries.nothingPlannedHint}
           />
         </div>
       ) : (
         <div className="space-y-6">
-          <DeliveryGroup title="Overdue" tone="danger" deliveries={overdue} />
-          <DeliveryGroup title="Due this week" tone="warning" deliveries={thisWeek} />
-          <DeliveryGroup title="Later" tone="default" deliveries={later} />
+          <DeliveryGroup title={t.deliveries.overdueGroup} tone="danger" deliveries={overdue} t={t} />
+          <DeliveryGroup title={t.deliveries.dueThisWeek} tone="warning" deliveries={thisWeek} t={t} />
+          <DeliveryGroup title={t.deliveries.later} tone="default" deliveries={later} t={t} />
         </div>
       )}
     </>
@@ -96,10 +97,12 @@ function DeliveryGroup({
   title,
   tone,
   deliveries,
+  t,
 }: {
   title: string;
   tone: "danger" | "warning" | "default";
   deliveries: UpcomingDelivery[];
+  t: Dictionary;
 }) {
   if (deliveries.length === 0) return null;
 
@@ -121,12 +124,12 @@ function DeliveryGroup({
         <table className="table table-hover">
           <thead>
             <tr>
-              <th>Planned</th>
-              <th>Delivery</th>
-              <th>Vendor / PO</th>
-              <th>Project</th>
-              <th className="num text-right">Outstanding qty</th>
-              <th className="num text-right">Value</th>
+              <th>{t.dashboard.planned}</th>
+              <th>{t.dashboard.delivery}</th>
+              <th>{t.dashboard.vendorPo}</th>
+              <th>{t.common.project}</th>
+              <th className="num text-end">{t.deliveries.outstandingQty}</th>
+              <th className="num text-end">{t.common.value}</th>
               <th className="w-28" />
             </tr>
           </thead>
@@ -136,7 +139,7 @@ function DeliveryGroup({
                 <td>
                   <div className="font-medium tabular">{formatDate(delivery.plannedDate)}</div>
                   <div className={`text-xs ${delivery.isOverdue ? "font-medium text-red-700" : "text-slate-500"}`}>
-                    {relativeDays(delivery.plannedDate)}
+                    {relativeDays(delivery.plannedDate, t)}
                   </div>
                 </td>
                 <td>
@@ -155,16 +158,16 @@ function DeliveryGroup({
                   </Link>
                   <div className="text-xs text-slate-500 tabular">{delivery.projectCode}</div>
                 </td>
-                <td className="num text-right tabular">{formatQty(delivery.outstandingQty)}</td>
-                <td className="num text-right">
+                <td className="num text-end tabular">{formatQty(delivery.outstandingQty)}</td>
+                <td className="num text-end">
                   <Money minor={delivery.valueMinor} currency={delivery.currency} />
                 </td>
-                <td className="text-right">
+                <td className="text-end">
                   <Link
                     href={`/vendor-pos/${delivery.vendorPoId}/grns/new?planItemId=${delivery.planItemId}`}
                     className="btn-primary btn-sm"
                   >
-                    Receive
+                    {t.dashboard.receive}
                   </Link>
                 </td>
               </tr>

@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { formatMoney, parseMoneyToMinor, parseQty } from "@/lib/money";
+import { useT } from "./LocaleProvider";
+import { fill } from "@/lib/i18n";
 
 /**
  * The line grid used by client documents, vendor POs and invoices.
@@ -37,7 +39,7 @@ export function LineItemsEditor({
   priceKey = "unitPrice",
   taxKey = "taxRatePct",
   addLabel = "Add line",
-  emptyMessage = "No lines yet.",
+  emptyMessage,
   onRowsChange,
 }: {
   name: string;
@@ -60,6 +62,7 @@ export function LineItemsEditor({
     initialRows && initialRows.length > 0 ? initialRows.map((row) => ({ ...blankRow, ...row })) : [{ ...blankRow }],
   );
   const gridRef = useRef<HTMLTableSectionElement>(null);
+  const t = useT();
 
   const update = useCallback(
     (next: EditorRow[]) => {
@@ -160,13 +163,13 @@ export function LineItemsEditor({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={column.type === "text" ? "" : "num text-right"}
+                  className={column.type === "text" ? "" : "num text-end"}
                   style={column.width ? { width: column.width } : undefined}
                 >
                   {column.label}
                 </th>
               ))}
-              {hasMoneyColumn && <th className="num w-32 text-right">Line total</th>}
+              {hasMoneyColumn && <th className="num w-32 text-end">{t.common.lineTotal}</th>}
               <th className="w-10" />
             </tr>
           </thead>
@@ -178,7 +181,7 @@ export function LineItemsEditor({
                   <td key={column.key} className={column.type === "text" ? "" : "num"}>
                     <input
                       data-cell={`${rowIndex}-${colIndex}`}
-                      className={`grid-input ${column.type === "text" ? "" : "text-right tabular"}`}
+                      className={`grid-input ${column.type === "text" ? "" : "text-end tabular"}`}
                       value={row[column.key] ?? ""}
                       placeholder={column.placeholder}
                       readOnly={column.readOnly}
@@ -190,15 +193,15 @@ export function LineItemsEditor({
                   </td>
                 ))}
                 {hasMoneyColumn && (
-                  <td className="num text-right text-slate-600 tabular">{formatMoney(rowTotalMinor(row), currency)}</td>
+                  <td className="num text-end text-slate-600 tabular">{formatMoney(rowTotalMinor(row), currency)}</td>
                 )}
                 <td className="text-center">
                   <button
                     type="button"
                     onClick={() => removeRow(rowIndex)}
                     className="rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                    aria-label={`Remove line ${rowIndex + 1}`}
-                    title="Remove line"
+                    aria-label={fill(t.editor.removeLine, { n: rowIndex + 1 })}
+                    title={t.common.remove}
                   >
                     ×
                   </button>
@@ -208,7 +211,7 @@ export function LineItemsEditor({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={columns.length + 3} className="py-6 text-center text-sm text-slate-500">
-                  {emptyMessage}
+                  {emptyMessage ?? t.editor.noLines}
                 </td>
               </tr>
             )}
@@ -216,29 +219,29 @@ export function LineItemsEditor({
           {hasMoneyColumn && (
             <tfoot>
               <tr className="border-t border-slate-200 bg-slate-50 text-sm">
-                <td colSpan={columns.length + 1} className="px-4 py-2 text-right font-medium text-slate-600">
-                  Net
+                <td colSpan={columns.length + 1} className="px-4 py-2 text-end font-medium text-slate-600">
+                  {t.common.net}
                 </td>
-                <td className="px-4 py-2 text-right font-semibold text-slate-900 tabular">
+                <td className="px-4 py-2 text-end font-semibold text-slate-900 tabular">
                   {formatMoney(subtotalMinor, currency)}
                 </td>
                 <td />
               </tr>
               {taxTotalMinor > 0 && (
                 <tr className="bg-slate-50 text-sm">
-                  <td colSpan={columns.length + 1} className="px-4 py-2 text-right font-medium text-slate-600">
-                    Tax
+                  <td colSpan={columns.length + 1} className="px-4 py-2 text-end font-medium text-slate-600">
+                    {t.common.tax}
                   </td>
-                  <td className="px-4 py-2 text-right text-slate-700 tabular">{formatMoney(taxTotalMinor, currency)}</td>
+                  <td className="px-4 py-2 text-end text-slate-700 tabular">{formatMoney(taxTotalMinor, currency)}</td>
                   <td />
                 </tr>
               )}
               {taxTotalMinor > 0 && (
                 <tr className="bg-slate-50 text-sm">
-                  <td colSpan={columns.length + 1} className="px-4 py-2 text-right font-medium text-slate-600">
-                    Gross
+                  <td colSpan={columns.length + 1} className="px-4 py-2 text-end font-medium text-slate-600">
+                    {t.common.gross}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold text-slate-900 tabular">
+                  <td className="px-4 py-2 text-end font-semibold text-slate-900 tabular">
                     {formatMoney(subtotalMinor + taxTotalMinor, currency)}
                   </td>
                   <td />
@@ -251,12 +254,11 @@ export function LineItemsEditor({
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => addRow()} className="btn-secondary btn-sm">
-          + {addLabel}
+          + {addLabel ?? t.editor.addLine}
         </button>
         <p className="text-xs text-slate-500">
-          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Enter</kbd> new row ·{" "}
-          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl+D</kbd> fill down · paste a block from
-          Excel
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Enter</kbd> {t.editor.newRow} ·{" "}
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl+D</kbd> {t.editor.fillDown} · {t.editor.pasteHint}
         </p>
       </div>
     </div>

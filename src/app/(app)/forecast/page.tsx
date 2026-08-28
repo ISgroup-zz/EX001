@@ -12,8 +12,7 @@ import {
 } from "@/server/services/forecast";
 import { formatDate } from "@/lib/dates";
 import { formatMoneyCompact, formatPercent, sumMinor } from "@/lib/money";
-
-export const metadata = { title: "Forecast · Procurement Hub" };
+import { getT } from "@/server/locale";
 
 /**
  * The forecast exists because every vendor PO carries a delivery plan: promised dates
@@ -37,12 +36,13 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
   const plannedAhead = sumMinor(delivery.map((bucket) => bucket.plannedMinor));
   const revenueAhead = sumMinor(billing.map((bucket) => bucket.plannedMinor));
   const cashAhead = sumMinor(cash.map((bucket) => bucket.plannedMinor));
+  const t = await getT();
 
   return (
     <>
       <PageHeader
-        title="Forecast"
-        subtitle="Built from the delivery plans on every vendor purchase order — promised dates, and the client value behind them."
+        title={t.forecast.title}
+        subtitle={t.forecast.subtitle}
         actions={
           <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
             {[3, 6, 12].map((option) => (
@@ -53,7 +53,7 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
                   forward === option ? "bg-slate-100 font-medium text-slate-900" : "text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                {option} months
+                {option === 3 ? t.forecast.months3 : option === 6 ? t.forecast.months6 : t.forecast.months12}
               </Link>
             ))}
           </div>
@@ -61,11 +61,11 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
       />
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Deliveries planned" value={formatMoneyCompact(plannedAhead)} hint="At vendor cost, in this window" />
-        <KpiCard label="Billable value" value={formatMoneyCompact(revenueAhead)} hint="Client value of those deliveries" />
-        <KpiCard label="Cash expected" value={formatMoneyCompact(cashAhead)} hint="From invoices already issued" />
+        <KpiCard label={t.forecast.deliveriesPlanned} value={formatMoneyCompact(plannedAhead)} hint={t.forecast.atVendorCost} />
+        <KpiCard label={t.forecast.billableValue} value={formatMoneyCompact(revenueAhead)} hint={t.forecast.clientValueOf} />
+        <KpiCard label={t.forecast.cashExpected} value={formatMoneyCompact(cashAhead)} hint={t.forecast.fromIssuedInvoices} />
         <KpiCard
-          label="Overdue deliveries"
+          label={t.forecast.overdueDeliveries}
           value={health.overdueCount}
           hint={formatMoneyCompact(health.overdueValueMinor)}
           tone={health.overdueCount > 0 ? "negative" : "positive"}
@@ -76,22 +76,22 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
         <section className="card">
           <div className="card-header">
             <div>
-              <h2 className="card-title">Deliveries — planned vs. actual</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Vendor cost of planned tranches against goods actually received.</p>
+              <h2 className="card-title">{t.forecast.deliveriesChart}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{t.forecast.deliveriesChartHint}</p>
             </div>
           </div>
           <div className="p-5">
             <ForecastChart buckets={delivery} />
           </div>
-          <ForecastTable buckets={delivery} plannedLabel="Planned" actualLabel="Received" />
+          <ForecastTable buckets={delivery} plannedLabel={t.forecast.plannedRow} actualLabel={t.forecast.receivedRow} monthLabel={t.forecast.month} />
         </section>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="card">
             <div className="card-header">
               <div>
-                <h2 className="card-title">Billing — expected vs. invoiced</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Client value of planned deliveries against invoices raised.</p>
+                <h2 className="card-title">{t.forecast.billingChart}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">{t.forecast.billingChartHint}</p>
               </div>
             </div>
             <div className="p-5">
@@ -102,12 +102,12 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
           <section className="card">
             <div className="card-header">
               <div>
-                <h2 className="card-title">Cash — due vs. received</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Outstanding invoice balances by due date against payments in.</p>
+                <h2 className="card-title">{t.forecast.cashChart}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">{t.forecast.cashChartHint}</p>
               </div>
             </div>
             <div className="p-5">
-              <ForecastChart buckets={cash} emptyMessage="No invoices outstanding in this period." />
+              <ForecastChart buckets={cash} emptyMessage={t.forecast.noInvoicesOutstanding} />
             </div>
           </section>
         </div>
@@ -115,31 +115,31 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="card overflow-hidden">
             <div className="card-header">
-              <h2 className="card-title">Vendor delivery performance</h2>
+              <h2 className="card-title">{t.forecast.vendorPerformance}</h2>
             </div>
             {vendors.length === 0 ? (
-              <EmptyState title="No measured receipts yet" description="Performance is measured once goods are received against a planned date." />
+              <EmptyState title={t.forecast.noReceipts} description={t.forecast.noReceiptsHint} />
             ) : (
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Vendor</th>
-                    <th className="num text-right">Receipts</th>
-                    <th className="num text-right">On time</th>
-                    <th className="num text-right">Average slip</th>
+                    <th>{t.common.vendor}</th>
+                    <th className="num text-end">{t.forecast.receipts}</th>
+                    <th className="num text-end">{t.forecast.onTime}</th>
+                    <th className="num text-end">{t.forecast.averageSlip}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {vendors.map((vendor) => (
                     <tr key={vendor.vendorId}>
                       <td className="text-slate-900">{vendor.vendorName}</td>
-                      <td className="num text-right tabular">{vendor.receipts}</td>
-                      <td className="num text-right tabular">{formatPercent(vendor.onTimePct, 0)}</td>
+                      <td className="num text-end tabular">{vendor.receipts}</td>
+                      <td className="num text-end tabular">{formatPercent(vendor.onTimePct, 0)}</td>
                       <td
-                        className={`num text-right tabular ${vendor.averageSlipDays > 0 ? "text-red-700" : "text-emerald-700"}`}
+                        className={`num text-end tabular ${vendor.averageSlipDays > 0 ? "text-red-700" : "text-emerald-700"}`}
                       >
                         {vendor.averageSlipDays > 0 ? "+" : ""}
-                        {vendor.averageSlipDays.toFixed(1)} days
+                        {vendor.averageSlipDays.toFixed(1)} {t.dashboard.days}
                       </td>
                     </tr>
                   ))}
@@ -150,21 +150,21 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
 
           <section className="card overflow-hidden">
             <div className="card-header">
-              <h2 className="card-title">Delivery pipeline</h2>
+              <h2 className="card-title">{t.forecast.pipeline}</h2>
               <Link href="/deliveries" className="link text-xs">
-                Work the queue →
+                {t.deliveries.workTheQueue}
               </Link>
             </div>
             {upcoming.length === 0 ? (
-              <EmptyState title="Nothing scheduled" />
+              <EmptyState title={t.projects.nothingScheduled} />
             ) : (
               <table className="table table-hover">
                 <thead>
                   <tr>
-                    <th>Planned</th>
-                    <th>Delivery</th>
-                    <th>Project</th>
-                    <th className="num text-right">Value</th>
+                    <th>{t.dashboard.planned}</th>
+                    <th>{t.dashboard.delivery}</th>
+                    <th>{t.common.project}</th>
+                    <th className="num text-end">{t.common.value}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,13 +176,13 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
                           {delivery.label}
                         </Link>
                         {delivery.isOverdue && (
-                          <span className="ml-2">
+                          <span className="ms-2">
                             <StatusBadge status="OVERDUE" />
                           </span>
                         )}
                       </td>
                       <td className="text-sm text-slate-600">{delivery.projectName}</td>
-                      <td className="num text-right">
+                      <td className="num text-end">
                         <Money minor={delivery.valueMinor} currency={delivery.currency} />
                       </td>
                     </tr>
@@ -202,10 +202,12 @@ function ForecastTable({
   buckets,
   plannedLabel,
   actualLabel,
+  monthLabel,
 }: {
   buckets: Array<{ key: string; label: string; plannedMinor: number; actualMinor: number }>;
   plannedLabel: string;
   actualLabel: string;
+  monthLabel: string;
 }) {
   const withData = buckets.filter((bucket) => bucket.plannedMinor > 0 || bucket.actualMinor > 0);
   if (withData.length === 0) return null;
@@ -215,9 +217,9 @@ function ForecastTable({
       <table className="table">
         <thead>
           <tr>
-            <th>Month</th>
+            <th>{monthLabel}</th>
             {withData.map((bucket) => (
-              <th key={bucket.key} className="num text-right">
+              <th key={bucket.key} className="num text-end">
                 {bucket.label}
               </th>
             ))}
@@ -227,7 +229,7 @@ function ForecastTable({
           <tr>
             <td className="font-medium text-slate-700">{plannedLabel}</td>
             {withData.map((bucket) => (
-              <td key={bucket.key} className="num text-right tabular">
+              <td key={bucket.key} className="num text-end tabular">
                 <Money minor={bucket.plannedMinor} />
               </td>
             ))}
@@ -235,7 +237,7 @@ function ForecastTable({
           <tr>
             <td className="font-medium text-slate-700">{actualLabel}</td>
             {withData.map((bucket) => (
-              <td key={bucket.key} className="num text-right tabular">
+              <td key={bucket.key} className="num text-end tabular">
                 <Money minor={bucket.actualMinor} />
               </td>
             ))}
