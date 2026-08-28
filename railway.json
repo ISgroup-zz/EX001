@@ -9,6 +9,9 @@
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5,
-    "numReplicas": 1
+    "numReplicas": 1,
+    "preDeployCommand": [
+      "npx prisma migrate deploy && npm run db:seed:if-empty"
+    ]
   }
 }
