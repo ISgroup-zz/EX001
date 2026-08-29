@@ -1,0 +1,518 @@
+// Procurement Hub — data model
+//
+// We sit between a client and one or more vendors:
+//   ClientAgreement (PO / contract / framework)  -> what the client committed to us  (budget, revenue)
+//   VendorPO                                     -> what we committed to a vendor    (cost)
+//   DeliveryPlanItem                             -> a PROMISED delivery              (forecast)
+//   GRN                                          -> an ACTUAL delivery               (billable)
+//   Invoice                                      -> what we billed the client
+//
+// Money is stored as integer minor units (e.g. cents) in every `*Minor` field — never floats.
+// Quantities are Float, rounded to 3 dp through src/lib/money.ts helpers.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- people & parties
+
+enum Role {
+  ADMIN
+  PROJECT_MANAGER
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(PROJECT_MANAGER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  managedProjects Project[]            @relation("ProjectManager")
+  receivedGrns    GRN[]                @relation("GrnReceivedBy")
+  vendorPayments  VendorPayment[]      @relation("VendorPaymentRecordedBy")
+  planChanges     DeliveryPlanChange[] @relation("PlanChangedBy")
+  sessions        Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Client {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  contactName      String?
+  email            String?
+  phone            String?
+  address          String?
+  taxId            String?
+  paymentTermsDays Int      @default(30)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  projects Project[]
+  invoices Invoice[]
+}
+
+model Vendor {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  contactName      String?
+  email            String?
+  phone            String?
+  address          String?
+  taxId            String?
+  paymentTermsDays Int      @default(30)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  vendorPos VendorPO[]
+}
+
+// ---------------------------------------------------------------- projects
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  CLOSED
+  CANCELLED
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  description String?
+  clientId    String
+  managerId   String?
+  status      ProjectStatus @default(ACTIVE)
+  currency    String        @default("USD")
+  startDate   DateTime      @default(now())
+  targetDate  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // The client document this project was opened on. Nullable at the DB level only because
+  // it is set in the same transaction that creates the agreement; every read path can
+  // assume it is populated (see src/server/services/project.ts).
+  originatingAgreementId String? @unique
+
+  client               Client            @relation(fields: [clientId], references: [id])
+  manager              User?             @relation("ProjectManager", fields: [managerId], references: [id])
+  originatingAgreement ClientAgreement?  @relation("OriginatingAgreement", fields: [originatingAgreementId], references: [id])
+  agreements           ClientAgreement[] @relation("ProjectAgreements")
+  vendorPos            VendorPO[]
+  invoices             Invoice[]
+
+  @@index([clientId])
+  @@index([managerId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------- client side (budget)
+
+enum AgreementType {
+  PO
+  CONTRACT
+  FRAMEWORK
+  VARIATION
+}
+
+enum AgreementStatus {
+  DRAFT
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CLOSED
+  CANCELLED
+}
+
+model ClientAgreement {
+  id        String          @id @default(cuid())
+  projectId String
+  type      AgreementType
+  reference String // the client's own document number
+  title     String?
+  status    AgreementStatus @default(ACTIVE)
+  issueDate DateTime        @default(now())
+  validFrom DateTime?
+  validTo   DateTime?
+
+  // Stated value when it is not derived from lines.
+  // FRAMEWORK: the ceiling. CONTRACT/VARIATION: the headline value when no lines are entered.
+  declaredValueMinor Int?
+
+  // A PO whose parent is a FRAMEWORK is a call-off: it consumes ceiling instead of adding budget.
+  // A VARIATION's parent is the contract or framework it amends.
+  parentAgreementId String?
+
+  documentUrl String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project         Project               @relation("ProjectAgreements", fields: [projectId], references: [id], onDelete: Cascade)
+  parentAgreement ClientAgreement?      @relation("AgreementHierarchy", fields: [parentAgreementId], references: [id])
+  children        ClientAgreement[]     @relation("AgreementHierarchy")
+  lines           ClientAgreementLine[]
+  openedProject   Project?              @relation("OriginatingAgreement")
+  vendorPos       VendorPO[]
+  invoices        Invoice[]
+
+  @@unique([projectId, reference])
+  @@index([projectId])
+  @@index([parentAgreementId])
+}
+
+model ClientAgreementLine {
+  id             String  @id @default(cuid())
+  agreementId    String
+  lineNo         Int
+  description    String
+  uom            String  @default("EA")
+  quantity       Float
+  unitPriceMinor Int
+  taxRatePct     Float   @default(0)
+  notes          String?
+
+  agreement     ClientAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  vendorPoLines VendorPOLine[]
+  invoiceLines  InvoiceLine[]
+
+  @@index([agreementId])
+}
+
+// ---------------------------------------------------------------- vendor side (cost)
+
+enum VendorPOStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+model VendorPO {
+  id                   String         @id @default(cuid())
+  projectId            String
+  vendorId             String
+  clientAgreementId    String? // which client document this PO serves
+  poNumber             String         @unique
+  status               VendorPOStatus @default(DRAFT)
+  issueDate            DateTime       @default(now())
+  expectedDeliveryDate DateTime?
+  notes                String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  project         Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor          Vendor               @relation(fields: [vendorId], references: [id])
+  clientAgreement ClientAgreement?     @relation(fields: [clientAgreementId], references: [id])
+  lines           VendorPOLine[]
+  planItems       DeliveryPlanItem[]
+  grns            GRN[]
+  vendorPayments  VendorPayment[]
+  planChanges     DeliveryPlanChange[]
+
+  @@index([projectId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model VendorPOLine {
+  id                    String  @id @default(cuid())
+  vendorPoId            String
+  lineNo                Int
+  clientAgreementLineId String? // the client line this fulfils — what makes billing automatic
+  description           String
+  uom                   String  @default("EA")
+  quantity              Float
+  unitCostMinor         Int
+  taxRatePct            Float   @default(0)
+  notes                 String?
+
+  vendorPo            VendorPO             @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  clientAgreementLine ClientAgreementLine? @relation(fields: [clientAgreementLineId], references: [id])
+  planLines           DeliveryPlanLine[]
+  grnLines            GRNLine[]
+
+  @@index([vendorPoId])
+  @@index([clientAgreementLineId])
+}
+
+// ---------------------------------------------------------------- delivery plan (planned GRNs)
+
+enum DeliveryPlanItemStatus {
+  PLANNED
+  PARTIAL
+  FULFILLED
+  CANCELLED
+}
+
+/// How a milestone's payment is expressed. A percentage follows the PO value if the
+/// order is later revised; a fixed amount does not, which suits mobilisation fees and
+/// other flat charges.
+enum PaymentBasis {
+  PERCENTAGE
+  FIXED
+}
+
+/// What happened to a delivery plan. Every change is recorded — plans get renegotiated
+/// and "who moved this date" must be answerable months later.
+enum PlanChangeAction {
+  PLAN_CREATED
+  MILESTONE_ADDED
+  MILESTONE_UPDATED
+  MILESTONE_CANCELLED
+  PAYMENT_RECORDED
+}
+
+/// A promised delivery from the vendor. "Overdue" is derived at read time from
+/// plannedDate vs. today, never stored, so it can't go stale.
+model DeliveryPlanItem {
+  id          String                 @id @default(cuid())
+  vendorPoId  String
+  seq         Int
+  label       String?
+  plannedDate DateTime
+  status      DeliveryPlanItemStatus @default(PLANNED)
+  notes       String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  // What we owe the vendor when this milestone is met. Exactly one of paymentPercent
+  // (basis PERCENTAGE) or paymentAmountMinor (basis FIXED) carries the value; the
+  // amount due is always derived by src/server/services/vendorPayment.ts so a
+  // percentage cannot go stale against a revised PO.
+  paymentBasis       PaymentBasis @default(PERCENTAGE)
+  paymentPercent     Float?
+  paymentAmountMinor Int?
+  /// Payment terms: days after the milestone is met before the money is due.
+  paymentDueDays     Int          @default(0)
+
+  vendorPo VendorPO             @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  lines    DeliveryPlanLine[]
+  grns     GRN[]
+  payments VendorPayment[]
+  changes  DeliveryPlanChange[]
+
+  @@unique([vendorPoId, seq])
+  @@index([plannedDate])
+}
+
+/// Money actually paid to the vendor against a milestone — the outgoing counterpart to
+/// Payment, which records money coming in from the client.
+model VendorPayment {
+  id           String   @id @default(cuid())
+  planItemId   String
+  vendorPoId   String
+  amountMinor  Int
+  paidDate     DateTime @default(now())
+  method       String?
+  reference    String?
+  notes        String?
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  planItem   DeliveryPlanItem @relation(fields: [planItemId], references: [id], onDelete: Cascade)
+  vendorPo   VendorPO         @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  recordedBy User?            @relation("VendorPaymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([planItemId])
+  @@index([vendorPoId])
+  @@index([paidDate])
+}
+
+/// Audit trail for the delivery plan and its payment terms.
+///
+/// Append-only: rows are never updated or deleted, so the history of a renegotiated
+/// schedule stays intact even after the milestone itself is changed again.
+model DeliveryPlanChange {
+  id          String           @id @default(cuid())
+  vendorPoId  String
+  planItemId  String?
+  action      PlanChangeAction
+  /// Which attribute moved, e.g. "plannedDate" or "paymentPercent". Null for whole-item events.
+  field       String?
+  oldValue    String?
+  newValue    String?
+  /// Human-readable line for the history panel.
+  summary     String
+  changedById String?
+  createdAt   DateTime         @default(now())
+
+  vendorPo  VendorPO          @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  planItem  DeliveryPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+  changedBy User?             @relation("PlanChangedBy", fields: [changedById], references: [id])
+
+  @@index([vendorPoId, createdAt])
+  @@index([planItemId])
+}
+
+model DeliveryPlanLine {
+  id              String @id @default(cuid())
+  planItemId      String
+  vendorPoLineId  String
+  plannedQuantity Float
+
+  planItem     DeliveryPlanItem @relation(fields: [planItemId], references: [id], onDelete: Cascade)
+  vendorPoLine VendorPOLine     @relation(fields: [vendorPoLineId], references: [id], onDelete: Cascade)
+
+  @@unique([planItemId, vendorPoLineId])
+  @@index([vendorPoLineId])
+}
+
+// ---------------------------------------------------------------- goods receipt (actual)
+
+enum GRNStatus {
+  DRAFT
+  POSTED
+}
+
+model GRN {
+  id                 String    @id @default(cuid())
+  vendorPoId         String
+  deliveryPlanItemId String? // the planned delivery this fulfils
+  grnNumber          String    @unique
+  status             GRNStatus @default(DRAFT)
+  receivedDate       DateTime  @default(now())
+  receivedById       String?
+  deliveryNoteRef    String?
+  notes              String?
+  postedAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  vendorPo         VendorPO          @relation(fields: [vendorPoId], references: [id], onDelete: Cascade)
+  deliveryPlanItem DeliveryPlanItem? @relation(fields: [deliveryPlanItemId], references: [id])
+  receivedBy       User?             @relation("GrnReceivedBy", fields: [receivedById], references: [id])
+  lines            GRNLine[]
+
+  @@index([vendorPoId])
+  @@index([deliveryPlanItemId])
+  @@index([status])
+}
+
+model GRNLine {
+  id               String  @id @default(cuid())
+  grnId            String
+  vendorPoLineId   String
+  quantityReceived Float
+  quantityAccepted Float
+  quantityRejected Float   @default(0)
+  remarks          String?
+
+  grn          GRN          @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  vendorPoLine VendorPOLine @relation(fields: [vendorPoLineId], references: [id])
+
+  @@index([grnId])
+  @@index([vendorPoLineId])
+}
+
+// ---------------------------------------------------------------- billing
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  projectId         String
+  clientId          String
+  clientAgreementId String
+  invoiceNumber     String        @unique
+  status            InvoiceStatus @default(DRAFT)
+  issueDate         DateTime      @default(now())
+  dueDate           DateTime?
+  currency          String        @default("USD")
+
+  // Snapshotted at issue time so later agreement edits never rewrite history.
+  subtotalMinor Int @default(0)
+  taxTotalMinor Int @default(0)
+  totalMinor    Int @default(0)
+
+  notes     String?
+  issuedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client          Client          @relation(fields: [clientId], references: [id])
+  clientAgreement ClientAgreement @relation(fields: [clientAgreementId], references: [id])
+  lines           InvoiceLine[]
+  payments        Payment[]
+
+  @@index([projectId])
+  @@index([clientId])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id                    String  @id @default(cuid())
+  invoiceId             String
+  clientAgreementLineId String?
+  lineNo                Int
+  description           String
+  uom                   String  @default("EA")
+  quantity              Float
+  unitPriceMinor        Int
+  taxRatePct            Float   @default(0)
+  lineTotalMinor        Int     @default(0)
+
+  invoice             Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  clientAgreementLine ClientAgreementLine? @relation(fields: [clientAgreementLineId], references: [id])
+
+  @@index([invoiceId])
+  @@index([clientAgreementLineId])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  amountMinor Int
+  paidDate    DateTime @default(now())
+  method      String?
+  reference   String?
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+/// Per-year sequence counters for human-facing document numbers (PRJ-, PO-, GRN-, INV-).
+model DocumentCounter {
+  id     String @id @default(cuid())
+  prefix String
+  year   Int
+  value  Int    @default(0)
+
+  @@unique([prefix, year])
+}
