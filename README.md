@@ -231,6 +231,30 @@ tests/                        vitest suites for the rules above (run against Pos
 every total goes through `src/lib/money.ts`, so agreement, PO, GRN and invoice figures
 can never disagree. Quantities are decimals rounded to 3 dp at each boundary.
 
+## Before you deploy
+
+`main` deploys to Railway automatically, and Railway runs `prisma migrate deploy` against the
+**live** database before traffic switches. There is no staging step in between, so the check
+happens before the push:
+
+```bash
+.claude/skills/quality-gate/scripts/run_gates.sh          # ~2 minutes
+.claude/skills/quality-gate/scripts/run_gates.sh --quick  # skip build + smoke while iterating
+```
+
+Seven gates: typecheck, lint, migration drift, **migration safety**, the full suite, the
+production build, and a browser smoke check across every route in both English and Arabic.
+
+The one that does not exist anywhere else is *migration safety*. The test suite builds an empty
+database each run, so it cannot see a migration that only fails once rows exist. This gate checks
+the deploy base out into a worktree, applies its migrations, seeds them, then applies the new
+migrations on top and verifies no table lost rows — the same sequence Railway performs. Adding
+`CREATE UNIQUE INDEX ON "Project"("currency")` leaves all 103 tests green and fails this gate
+with the exact error the deploy would hit.
+
+Claude Code picks the same workflow up as the `quality-gate` skill, which also covers writing
+test cases for a change and the report format — see `.claude/skills/quality-gate/`.
+
 ## Commands
 
 ```bash
